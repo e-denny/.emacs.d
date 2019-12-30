@@ -8,6 +8,7 @@
   "File in which ivy-views will be saved.")
 
 (use-package ivy
+  :diminish ivy-mode
   :ensure ivy-hydra
   :commands (ivy-switch-buffer ivy-push-view ivy-pop-view)
   :hook (emacs-startup . ivy-mode)
@@ -61,6 +62,14 @@
              swiper-all))
 
 (use-package counsel
+  :config
+  (defun my/counsel-rg-thing-at-point ()
+    (interactive)
+    (counsel-rg (format "%s" (let ((sym (thing-at-point 'symbol)))
+                               (if sym sym "")))))
+
+  (setq counsel-grep-base-command
+        "rg -i -M 120 --no-heading --line-number --color never '%s' %s")
   :commands (counsel-ag counsel-rg counsel-pt counsel-apropos counsel-bookmark
              counsel-describe-function counsel-describe-variable
              counsel-describe-face counsel-M-x counsel-file-jump

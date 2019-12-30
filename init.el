@@ -70,16 +70,15 @@
 (require 'hippie-exp-setup)
 (require 'paradox-setup)
 (require 'multiple-cursors-setup)
-(require 'desktop-setup)
-; (require 'modal-setup)
-(require 'vterm-setup)
+;; (require 'desktop-setup)
+;; (require 'modal-setup)
+;; (require 'vterm-setup)
 (require 'ivy-setup)
-;; (require 'keybindings-setup)
-(require 'evil-setup)
+(require 'keybindings-setup)
+;; (require 'evil-setup)
 
 (setq custom-file "~/.emacs.d/custom.el")
 (load custom-file)
-
 (provide 'init)
 
 ;;; init.el ends here

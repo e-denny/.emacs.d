@@ -1,8 +1,8 @@
-;;; evil-setup.el --- evil minor mode. -*- coding: utf-8; lexical-binding: t; -*-
+;;; keybindings-setup.el --- evil minor mode. -*- coding: utf-8; lexical-binding: t; -*-
 
 ;;; Commentary:
 
-;;; Modal Command Key Bindings
+;;; Command Key Bindings
 
 ;;; Code:
 
@@ -34,6 +34,82 @@
   ("S" info-lookup-symbol "Lookup Symbol in Info")
   ("q" nil))
 
+(defhydra hydra-rectangle (:body-pre (rectangle-mark-mode 1)
+                                     :color pink
+                                     :post (deactivate-mark))
+ "
+  ^_k_^     _d_elete    _s_tring
+_h_   _l_   _o_k        _y_ank
+  ^_j_^     _n_ew-copy  _r_eset
+^^^^        _e_xchange  _u_ndo
+^^^^        ^ ^         _p_aste
+"
+ ("h" backward-char nil)
+ ("l" forward-char nil)
+ ("k" previous-line nil)
+ ("j" next-line nil)
+ ("e" exchange-point-and-mark nil)
+ ("n" copy-rectangle-as-kill nil)
+ ("d" delete-rectangle nil)
+ ("r" (if (region-active-p)
+          (deactivate-mark)
+        (rectangle-mark-mode 1)) nil)
+ ("y" yank-rectangle nil)
+ ("u" undo nil)
+ ("s" string-rectangle nil)
+ ("p" kill-rectangle nil)
+ ("o" nil nil))
+
+(defhydra hydra-flycheck (:color blue)
+  "
+^
+^Flycheck^          ^Errors^            ^Checker^
+^────────^──────────^──────^────────────^───────^───────────
+[_q_] quit          [_c_] check         [_s_] select
+[_v_] verify setup  [_n_] next          [_d_] disable
+[_m_] manual        [_p_] previous      [_?_] describe
+[_i_] inline
+^^                  ^^                  ^^
+"
+  ("q" nil)
+  ("c" flycheck-buffer)
+  ("d" flycheck-disable-checker)
+  ("m" flycheck-manual)
+  ("n" flycheck-next-error :color red)
+  ("p" flycheck-previous-error :color red)
+  ("s" flycheck-select-checker)
+  ("v" flycheck-verify-setup)
+  ("i" (lambda ()
+         (interactive)
+         (if (eq 'flycheck-display-errors-function 'flycheck-display-error-messages)
+             (setq-local flycheck-display-error-function 'flycheck-inline)
+           (setq-local flycheck-display-error-function 'flycheck-display-error-messages)))
+   :color amaranth)
+  ("?" flycheck-describe-checker))
+
+
+(use-package multiple-cursors
+  ;; :disabled t
+  :config
+  (defhydra hydra-multiple-cursors (:hint nil)
+    "
+     ^Up^            ^Down^        ^Other^
+----------------------------------------------
+[_p_]   Next    [_n_]   Next    [_l_] Edit lines
+[_P_]   Skip    [_N_]   Skip    [_a_] Mark all
+[_M-p_] Unmark  [_M-n_] Unmark  [_r_] Mark by regexp
+^ ^             ^ ^             [_q_] Quit
+"
+    ("l" mc/edit-lines :exit t)
+    ("a" mc/mark-all-like-this :exit t)
+    ("n" mc/mark-next-like-this)
+    ("N" mc/skip-to-next-like-this)
+    ("M-n" mc/unmark-next-like-this)
+    ("p" mc/mark-previous-like-this)
+    ("P" mc/skip-to-previous-like-this)
+    ("M-p" mc/unmark-previous-like-this)
+    ("r" mc/mark-all-in-region-regexp :exit t)
+    ("q" nil)))
 
 (defun ivy--matcher-desc ()            ; used in `hydra-ivy'
   (if (eq ivy--regex-function
@@ -41,12 +117,16 @@
       "fuzzy"
     "ivy"))
 
+(defun my/shell-command (command)
+  (interactive (list (read-shell-command "$ ")))
+  (start-process-shell-command command nil command))
+
 (general-define-key
  "s-w" '(:ignore t :which-key "window")
  "s-w l"  '(windmove-right :which-key "move right")
- "s-w h"  '(windmove-left :which-key "move left")
- "s-w k"  '(windmove-up :which-key "move up")
- "s-w j"  '(windmove-down :which-key "move bottom")
+ "s-w j"  '(windmove-left :which-key "move left")
+ "s-w i"  '(windmove-up :which-key "move up")
+ "s-w k"  '(windmove-down :which-key "move bottom")
  "s-w 3"  '(split-window-right :which-key "split right")
  "s-w 2"  '(split-window-below :which-key "split bottom")
  "s-w x"  '(delete-window :which-key "delete window")
@@ -56,7 +136,8 @@
  "s-w <"  'evil-window-increase-width
  "s-w ="  'balance-windows
  "s-w d"  'delete-window
- "s-d 0"  'delete-other-windows
+ "s-w 0"  'delete-other-windows
+ "s-w t"  'exwm-floating-toggle-floating
 
  "s-SPC" 'counsel-M-x
 
@@ -73,10 +154,10 @@
  "s-f s" 'save-buffer
  "s-f r" 'counsel-recentf
 
-;; "s-l" '(:ignore t :which-key "launch")
-;; "s-l a" 'counsel-linux-app
+"s-l" '(:ignore t :which-key "launch")
+"s-l a" 'my/shell-command
 
- "s-s"  '(:ignore t :which-key "search")
+ "s-s"   '(:ignore t :which-key "search")
  "s-s s" 'swiper
  "s-s p" 'swiper-thing-at-point
  "s-s i" 'swiper-isearch
@@ -84,6 +165,7 @@
  "s-s c" 'evil-ex-nohighlight
  "s-s r" 'counsel-rg
  "s-s g" 'counsel-grep-or-swiper
+ "s-s t" 'my/counsel-rg-thing-at-point
 
  "s-g" '(:ignore t :which-key "git")
  "s-g s" 'magit-status
@@ -91,13 +173,16 @@
  "s-g c" 'magit-commit
  "s-g p" 'magit-push
 
- "s-j"  '(:ignore t :whick-key "jump")
+ "s-j"   '(:ignore t :whick-key "jump")
  "s-j i" 'counsel-imenu
  "s-j o" 'ivy-occur
 
- "s-h "  '(hydra-help/body :which-key "help")
+ "s-h " '(hydra-help/body :which-key "help")
+ "s-c"  '(hydra-flycheck/body :which-key "flycheck")
+ "s-m"  '(hydra-multiple-cursors/body :which-key "multiple-cursors")
+ "s-r"  '(hydra-rectangle/body)
 
- "s-v"  '(:ignore t :which "view")
+ "s-v"   '(:ignore t :which "view")
  "s-v p" 'ivy-push-view
  "s-v o" 'ivy-pop-view
  "s-v s" 'my/save-ivy-views
@@ -107,11 +192,7 @@
  "s-z"  '(hydra-zoom/body :which-key "zoom")
  )
 
-(exwm-input-set-key (kbd "s-j") #'windmove-left)
-(exwm-input-set-key (kbd "s-k") #'windmove-down)
-(exwm-input-set-key (kbd "s-i") #'windmove-up)
-(exwm-input-set-key (kbd "s-l") #'windmove-right)
-(exwm-input-set-key (kbd "s-t") #'exwm-floating-toggle-floating)
+
 
 (defhydra hydra-buffer-menu (:color pink :hint nil)
   "
@@ -166,88 +247,10 @@ Vimish Fold
     ("a" vimish-fold-avy)
     ("q" nil :color blue)))
 
-(defhydra hydra-rectangle (:body-pre (rectangle-mark-mode 1)
-                                     :color pink
-                                     :post (deactivate-mark))
-  "
-  ^_k_^     _d_elete    _s_tring
-_h_   _l_   _o_k        _y_ank
-  ^_j_^     _n_ew-copy  _r_eset
-^^^^        _e_xchange  _u_ndo
-^^^^        ^ ^         _p_aste
-"
-  ("h" backward-char nil)
-  ("l" forward-char nil)
-  ("k" previous-line nil)
-  ("j" next-line nil)
-  ("e" exchange-point-and-mark nil)
-  ("n" copy-rectangle-as-kill nil)
-  ("d" delete-rectangle nil)
-  ("r" (if (region-active-p)
-           (deactivate-mark)
-         (rectangle-mark-mode 1)) nil)
-  ("y" yank-rectangle nil)
-  ("u" undo nil)
-  ("s" string-rectangle nil)
-  ("p" kill-rectangle nil)
-  ("o" nil nil))
-
-(use-package multiple-cursors
-  :disabled t
-  :config
-  (defhydra hydra-multiple-cursors (:hint nil)
-    "
-     ^Up^            ^Down^        ^Other^
-----------------------------------------------
-[_p_]   Next    [_n_]   Next    [_l_] Edit lines
-[_P_]   Skip    [_N_]   Skip    [_a_] Mark all
-[_M-p_] Unmark  [_M-n_] Unmark  [_r_] Mark by regexp
-^ ^             ^ ^             [_q_] Quit
-"
-    ("l" mc/edit-lines :exit t)
-    ("a" mc/mark-all-like-this :exit t)
-    ("n" mc/mark-next-like-this)
-    ("N" mc/skip-to-next-like-this)
-    ("M-n" mc/unmark-next-like-this)
-    ("p" mc/mark-previous-like-this)
-    ("P" mc/skip-to-previous-like-this)
-    ("M-p" mc/unmark-previous-like-this)
-    ("r" mc/mark-all-in-region-regexp :exit t)
-    ("q" nil)))
-
-
-(defhydra hydra-flycheck (:color blue)
-  "
-^
-^Flycheck^          ^Errors^            ^Checker^
-^────────^──────────^──────^────────────^───────^───────────
-[_q_] quit          [_c_] check         [_s_] select
-[_v_] verify setup  [_n_] next          [_d_] disable
-[_m_] manual        [_p_] previous      [_?_] describe
-[_i_] inline
-^^                  ^^                  ^^
-"
-  ("q" nil)
-  ("c" flycheck-buffer)
-  ("d" flycheck-disable-checker)
-  ("m" flycheck-manual)
-  ("n" flycheck-next-error :color red)
-  ("p" flycheck-previous-error :color red)
-  ("s" flycheck-select-checker)
-  ("v" flycheck-verify-setup)
-  ("i" (lambda ()
-         (interactive)
-         (if (eq 'flycheck-display-errors-function 'flycheck-display-error-messages)
-             (setq-local flycheck-display-error-function 'flycheck-inline)
-           (setq-local flycheck-display-error-function 'flycheck-display-error-messages)))
-   :color amaranth)
-  ("?" flycheck-describe-checker))
-
 ;; (ace-link-setup-default)
-;; (evil-leader/set-key "a" 'hydra-avy/body)
 ;; dumb jump and ivy integration
 ;; elisp-refs package
 ;; ivy-view
-(provide 'evil-setup)
+(provide 'keybindings-setup)
 
-;;; evil-setup ends here
+;;; keybindings-setup ends here

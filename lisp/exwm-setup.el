@@ -26,23 +26,14 @@
   (unless (get 'exwm-input-global-keys 'saved-value)
     (setq exwm-input-global-keys
           `(([?\s-r] . exwm-reset)
-            ([?\s-w] . exwm-workspace-switch)
-            ;; Launch application.
-            ([?\s-&] . (lambda (command)
-                         (interactive (list (read-shell-command "$ ")))
-                         (start-process-shell-command command nil command)))
+            ;; ([?\s-w] . exwm-workspace-switch)
             ;; 's-N': Switch to certain workspace.
             ,@(mapcar (lambda (i)
                         `(,(kbd (format "s-%d" i)) .
                           (lambda ()
                             (interactive)
                             (exwm-workspace-switch-create ,i))))
-                      (number-sequence 0 9)))))
-  ;; (exwm-input-set-key (kbd "s-<left>") #'windmove-left)
-  ;; (exwm-input-set-key (kbd "s-<down>") #'windmove-down)
-  ;; (exwm-input-set-key (kbd "s-<up>") #'windmove-up)
-  ;; (exwm-input-set-key (kbd "s-<right>") #'windmove-right)
-  ;; (exwm-input-set-key (kbd "s-t") #'exwm-floating-toggle-floating)
+                      (number-sequence 0 3)))))
   ;; ;; Firefox: open everything in new windows
   ;; 1: about:config -> browser.tabs.opentabfor.middleclick -> false
   ;; 2: place the following in chrome/userChrome.css in your FF profile:
