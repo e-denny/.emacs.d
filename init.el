@@ -70,6 +70,7 @@
 (require 'hippie-exp-setup)
 (require 'paradox-setup)
 (require 'multiple-cursors-setup)
+(require 'avy-setup)
 ;; (require 'desktop-setup)
 ;; (require 'modal-setup)
 ;; (require 'vterm-setup)
