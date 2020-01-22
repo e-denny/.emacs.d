@@ -2,7 +2,7 @@
 
 ;;; Commentary:
 
-;;; Fringe Setup
+;;; Avy Setup
 
 ;;; Code:
 

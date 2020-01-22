@@ -14,10 +14,11 @@
   (package-refresh-contents)
   (package-install 'use-package))
 
-(customize-set-variable 'use-package-compute-statistics t)
-
 (eval-when-compile
   (require 'use-package))
+
+(customize-set-variable 'use-package-compute-statistics t)
+(setq use-package-always-ensure t)
 
 (add-to-list 'load-path "~/.emacs.d/lisp/")
 
@@ -34,6 +35,7 @@
              (garbage-collect)) t)
 
 (require 'defaults-setup)
+(require 'exwm-setup)
 (require 'diminish-setup)
 (require 'fringe-setup)
 (require 'treemacs-setup)
@@ -42,9 +44,7 @@
 (require 'projectile-setup)
 (require 'company-setup)
 (require 'lsp-setup)
-(require 'exwm-setup)
 (require 'eshell-setup)
-;; (require 'helm-setup)
 (require 'all-the-icons-setup)
 (require 'hydra-setup)
 (require 'dired-setup)
@@ -56,7 +56,7 @@
 (require 'elfeed-setup)
 (require 'spell-setup)
 (require 'pdf-setup)
-(require 'spaceline-setup)
+(require 'moody-setup)
 (require 'which-key-setup)
 (require 'sx-setup)
 (require 'dashboard)
@@ -72,11 +72,8 @@
 (require 'multiple-cursors-setup)
 (require 'avy-setup)
 ;; (require 'desktop-setup)
-;; (require 'modal-setup)
-;; (require 'vterm-setup)
 (require 'ivy-setup)
 (require 'keybindings-setup)
-;; (require 'evil-setup)
 
 (setq custom-file "~/.emacs.d/custom.el")
 (load custom-file)

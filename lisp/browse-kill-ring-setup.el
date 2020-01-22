@@ -13,7 +13,6 @@
 
 (setq save-interprogram-paste-before-kill t)
 
-
 (provide 'browse-kill-ring-setup)
 
 ;;; browse-kill-ring-setup.el ends here

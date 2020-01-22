@@ -9,6 +9,9 @@
 (use-package general
   :ensure t)
 
+
+;;; Hydras
+
 (defhydra hydra-zoom ()
   ("g" text-scale-increase "in")
   ("l" text-scale-decrease "out"))
@@ -34,42 +37,31 @@
   ("S" info-lookup-symbol "Lookup Symbol in Info")
   ("q" nil))
 
-(defhydra hydra-rectangle (:body-pre (rectangle-mark-mode 1)
-                                     :color pink
-                                     :post (deactivate-mark))
- "
-  ^_k_^     _d_elete    _s_tring
-_h_   _l_   _o_k        _y_ank
-  ^_j_^     _n_ew-copy  _r_eset
-^^^^        _e_xchange  _u_ndo
-^^^^        ^ ^         _p_aste
-"
- ("h" backward-char nil)
- ("l" forward-char nil)
- ("k" previous-line nil)
- ("j" next-line nil)
- ("e" exchange-point-and-mark nil)
- ("n" copy-rectangle-as-kill nil)
- ("d" delete-rectangle nil)
- ("r" (if (region-active-p)
-          (deactivate-mark)
-        (rectangle-mark-mode 1)) nil)
- ("y" yank-rectangle nil)
- ("u" undo nil)
- ("s" string-rectangle nil)
- ("p" kill-rectangle nil)
- ("o" nil nil))
+(defhydra hydra-rectangle (:body-pre (rectangle-mark-mode 1) :post (deactivate-mark))
+  "
+    -----          |   ^_i_^   |    _d_elete    _k_ill
+Rectangle Mode     | _j_   _l_ |    _s_tring    _y_ank
+    -----          |   ^_k_^   |    _c_opy      _r_eset"
+  ("i" rectangle-previous-line nil)
+  ("k" rectangle-next-line nil)
+  ("j" rectangle-backward-char nil)
+  ("l" rectangle-forward-char nil)
+  ("d" delete-rectangle nil)
+  ("s" string-rectangle nil :exit t)
+  ("k" kill-rectangle nil)
+  ("y" yank-rectangle nil :exit t)
+  ("c" copy-rectangle-as-kill nil)
+  ("r" (progn (if (region-active-p)
+                  (deactivate-mark))
+              (rectangle-mark-mode 1)) nil))
 
 (defhydra hydra-flycheck (:color blue)
-  "
-^
-^Flycheck^          ^Errors^            ^Checker^
+  "^Flycheck^          ^Errors^            ^Checker^
 ^────────^──────────^──────^────────────^───────^───────────
 [_q_] quit          [_c_] check         [_s_] select
 [_v_] verify setup  [_n_] next          [_d_] disable
 [_m_] manual        [_p_] previous      [_?_] describe
 [_i_] inline
-^^                  ^^                  ^^
 "
   ("q" nil)
   ("c" flycheck-buffer)
@@ -92,8 +84,7 @@ _h_   _l_   _o_k        _y_ank
   ;; :disabled t
   :config
   (defhydra hydra-multiple-cursors (:hint nil)
-    "
-     ^Up^            ^Down^        ^Other^
+    "^Up^            ^Down^        ^Other^
 ----------------------------------------------
 [_p_]   Next    [_n_]   Next    [_l_] Edit lines
 [_P_]   Skip    [_N_]   Skip    [_a_] Mark all
@@ -165,17 +156,89 @@ T - tag prefix
   ("q" nil)
   ("." nil :color blue))
 
+(defhydra hydra-mu4e-headers (:color blue :hint nil)
+  "
+ ^General^   | ^Search^           | _!_: read    | _#_: deferred  | ^Switches^
+-^^----------+-^^-----------------| _?_: unread  | _%_: pattern   |-^^------------------
+_n_: next    | _s_: search        | _r_: refile  | _&_: custom    | _O_: sorting
+_p_: prev    | _S_: edit prev qry | _u_: unmk    | _+_: flag      | _P_: threading
+_]_: n unred | _/_: narrow search | _U_: unmk *  | _-_: unflag    | _Q_: full-search
+_[_: p unred | _b_: search bkmk   | _d_: trash   | _T_: thr       | _V_: skip dups
+_y_: sw view | _B_: edit bkmk     | _D_: delete  | _t_: subthr    | _W_: include-related
+_R_: reply   | _{_: previous qry  | _m_: move    |-^^-------------+-^^------------------
+_C_: compose | _}_: next query    | _a_: action  | _|_: thru shl  | _`_: update, reindex
+_F_: forward | _C-+_: show more   | _A_: mk4actn | _H_: help      | _;_: context-switch
+_o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2maildir "
+  ;; general
+  ("n" mu4e-headers-next)
+  ("p" mu4e-headers-previous)
+  ("[" mu4e-select-next-unread)
+  ("]" mu4e-select-previous-unread)
+  ("y" mu4e-select-other-view)
+  ("R" mu4e-compose-reply)
+  ("C" mu4e-compose-new)
+  ("F" mu4e-compose-forward)
+  ("o" my/org-capture-mu4e)                  ; differs from built-in
+  ;; search
+  ("s" mu4e-headers-search)
+  ("S" mu4e-headers-search-edit)
+  ("/" mu4e-headers-search-narrow)
+  ("b" mu4e-headers-search-bookmark)
+  ("B" mu4e-headers-search-bookmark-edit)
+  ("{" mu4e-headers-query-prev)              ; differs from built-in
+  ("}" mu4e-headers-query-next)              ; differs from built-in
+  ("C-+" mu4e-headers-split-view-grow)
+  ("C--" mu4e-headers-split-view-shrink)
+  ;; mark stuff
+  ("!" mu4e-headers-mark-for-read)
+  ("?" mu4e-headers-mark-for-unread)
+  ("r" mu4e-headers-mark-for-refile)
+  ("u" mu4e-headers-mark-for-unmark)
+  ("U" mu4e-mark-unmark-all)
+  ("d" mu4e-headers-mark-for-trash)
+  ("D" mu4e-headers-mark-for-delete)
+  ("m" mu4e-headers-mark-for-move)
+  ("a" mu4e-headers-action)                  ; not really a mark per-se
+  ("A" mu4e-headers-mark-for-action)         ; differs from built-in
+  ("*" mu4e-headers-mark-for-something)
+  ("#" mu4e-mark-resolve-deferred-marks)
+  ("%" mu4e-headers-mark-pattern)
+  ("&" mu4e-headers-mark-custom)
+  ("+" mu4e-headers-mark-for-flag)
+  ("-" mu4e-headers-mark-for-unflag)
+  ("t" mu4e-headers-mark-subthread)
+  ("T" mu4e-headers-mark-thread)
+  ;; miscellany
+  ("q" mu4e~headers-quit-buffer)
+  ("H" mu4e-display-manual)
+  ("|" mu4e-view-pipe)                       ; does not seem built-in any longer
+  ;; switches
+  ("O" mu4e-headers-change-sorting)
+  ("P" mu4e-headers-toggle-threading)
+  ("Q" mu4e-headers-toggle-full-search)
+  ("V" mu4e-headers-toggle-skip-duplicates)
+  ("W" mu4e-headers-toggle-include-related)
+  ;; more miscellany
+  ("`" mu4e-update-mail-and-index)           ; differs from built-in
+  (";" mu4e-context-switch)
+  ("j" mu4e~headers-jump-to-maildir)
+  ("." nil))
 
-(defun ivy--matcher-desc ()            ; used in `hydra-ivy'
-  (if (eq ivy--regex-function
-          'ivy--regex-fuzzy)
-      "fuzzy"
-    "ivy"))
+;;; Functions
+
+(defun ivy--matcher-desc ()
+ "Used in `hydra-ivy'."
+ (if (eq ivy--regex-function
+         'ivy--regex-fuzzy)
+     "fuzzy"
+   "ivy"))
 
 (defun my/shell-command (command)
   "Execute shell COMMAND from the minibuffer."
   (interactive (list (read-shell-command "$ ")))
   (start-process-shell-command command nil command))
+
+;;; Global Keybindings
 
 (general-define-key
  "s-w"    '(:ignore t :which-key "window")
@@ -183,16 +246,16 @@ T - tag prefix
  "s-w j"  '(windmove-left :which-key "move left")
  "s-w i"  '(windmove-up :which-key "move up")
  "s-w k"  '(windmove-down :which-key "move bottom")
- "s-w 3"  '(split-window-right :which-key "split right")
- "s-w 2"  '(split-window-below :which-key "split bottom")
- "s-w x"  '(delete-window :which-key "delete window")
- "s-w +"  'evil-window-increase-height
- "s-w -"  'evil-window-decrease-height
- "s-w >"  'evil-window-increase-width
- "s-w <"  'evil-window-increase-width
+ "s-w v"  '(split-window-right :which-key "split right")
+ "s-w c"  '(split-window-below :which-key "split bottom")
+ "s-w d "  '(delete-window :which-key "delete window")
+ ;; "s-w +"  'evil-window-increase-height
+ ;; "s-w -"  'evil-window-decrease-height
+ ;; "s-w >"  'evil-window-increase-width
+ ;; "s-w <"  'evil-window-increase-width
  "s-w ="  'balance-windows
  "s-w d"  'delete-window
- "s-w 0"  'delete-other-windows
+ "s-w z"  'delete-other-windows
  "s-w t"  'exwm-floating-toggle-floating
 
  "s-SPC" 'counsel-M-x
@@ -200,9 +263,8 @@ T - tag prefix
  "s-b"   '(:ignore t :which-key "buffer")
  "s-b b" 'ivy-switch-buffer
  "s-b d" 'kill-buffer
- "s-b n" 'evil-buffer-new
- "s-b h" 'previous-buffer
- "s-b                "'next-buffer
+ "s-b p" 'previous-buffer
+ "s-b n" 'next-buffer
  "s-b i" 'counsel-ibuffer
 
  "s-c"   '(:ignore t :which-key "code")
@@ -210,21 +272,22 @@ T - tag prefix
  "s-c s" 'counsel-info-lookup-symbol
  "s-c u" 'counsel-unicode-char
 
+ "s-k d" 'general-describe-keybindings
 
  "s-f"   '(:ignore t :which-key "file")
  "s-f f" 'counsel-find-file
  "s-f s" 'save-buffer
  "s-f r" 'counsel-recentf
+ "s-f d" 'dired-sidebar-toggle-sidebar
 
-"s-l"    '(:ignore t :which-key "launch")
-"s-l a"  'my/shell-command
+ "s-l"   '(:ignore t :which-key "launch")
+ "s-l a" 'my/shell-command
 
  "s-s"   '(:ignore t :which-key "search")
  "s-s s" 'swiper
  "s-s p" 'swiper-thing-at-point
  "s-s i" 'swiper-isearch
  "s-s a" 'swiper-all
- "s-s c" 'evil-ex-nohighlight
  "s-s r" 'counsel-rg
  "s-s g" 'counsel-grep-or-swiper
  "s-s t" 'my/counsel-rg-thing-at-point
@@ -237,16 +300,24 @@ T - tag prefix
  "s-g c" 'magit-commit
  "s-g p" 'magit-push
  "s-g G" 'counsel-git
+ "s-g n" 'git-gutter:next-hunk
+ "s-g p" 'git-gutter:previous-hunk
+ "s-g =" 'git-gutter:popup-hunk
+ "s-g r" 'git-gutter:revert-hunk
+ "s-g l" 'counsel-git-log
+ "s-g g" 'counsel-git-grep
 
  "s-j"   '(:ignore t :whick-key "jump")
  "s-j i" 'counsel-imenu
  "s-j o" 'ivy-occur
  "s-j l" 'counsel-find-library
 
- "s-h " '(hydra-help/body :which-key "help")
- "s-c"  '(hydra-flycheck/body :which-key "flycheck")
- "s-m"  '(hydra-multiple-cursors/body :which-key "multiple-cursors")
- "s-r"  '(hydra-rectangle/body)
+ "s-h"   '(:ignore t :whick-key "hydra")
+ "s-h h" '(hydra-help/body :which-key "help")
+ "s-h c" '(hydra-flycheck/body :which-key "flycheck")
+ "s-h m" '(hydra-multiple-cursors/body :which-key "multiple-cursors")
+ "s-h r" '(hydra-rectangle/body)
+ "s-h z" '(hydra-zoom/body :which-key "zoom")
 
  "s-v"   '(:ignore t :which "view")
  "s-v p" 'ivy-push-view
@@ -255,49 +326,34 @@ T - tag prefix
  "s-v l" 'my/load-ivy-views
  "s-v v" 'ivy-switch-view
 
-
  "s-x"   '(:ignore t :which "minibuffer")
  "s-x h" 'counsel-minibuffer-history
 
-
- "s-z"  '(hydra-zoom/body :which-key "zoom")
+ "s-<tab>" 'company-complete
  )
 
-(define-key dired-mode-map "." 'hydra-dired/body)
-(let ((map company-active-map))
-  (define-key map (kbd "TAB")   'company-complete-selection)
-  (define-key map (kbd "C-/")   'company-search-candidates)
-  (define-key map (kbd "C-M-/") 'company-filter-candidates)
-  (define-key map (kbd "C-d")   'company-show-doc-buffer))
+;;; Mode Keybindings
 
-(defhydra hydra-buffer-menu (:color pink :hint nil)
-  "
-^Mark^             ^Unmark^           ^Actions^          ^Search
-^^^^^^^^-----------------------------------------------------------------
-_m_: mark          _u_: unmark        _x_: execute       _R_: re-isearch
-_s_: save          _U_: unmark up     _b_: bury          _I_: isearch
-_d_: delete        ^ ^                _g_: refresh       _O_: multi-occur
-_D_: delete up     ^ ^                _T_: files only: % -28`Buffer-menu-files-only^^
-_~_: modified      ^ ^                ^ ^                ^^
-"
-  ("m" Buffer-menu-mark)
-  ("u" Buffer-menu-unmark)
-  ("U" Buffer-menu-backup-unmark)
-  ("d" Buffer-menu-delete)
-  ("D" Buffer-menu-delete-backwards)
-  ("s" Buffer-menu-save)
-  ("~" Buffer-menu-not-modified)
-  ("x" Buffer-menu-execute)
-  ("b" Buffer-menu-bury)
-  ("g" revert-buffer)
-  ("T" Buffer-menu-toggle-files-only)
-  ("O" Buffer-menu-multi-occur :color blue)
-  ("I" Buffer-menu-isearch-buffers :color blue)
-  ("R" Buffer-menu-isearch-buffers-regexp :color blue)
-  ("c" nil "cancel")
-  ("v" Buffer-menu-select "select" :color blue)
-  ("o" Buffer-menu-other-window "other-window" :color blue)
-  ("q" quit-window "quit" :color blue))
+(general-define-key
+ :keymaps 'projectile-mode-map
+ "s-p" '(:ignore t :which "projectile mode map")
+ "s-p p" 'projectile-command-map)
+
+;; (general-define-key
+;;  :keymaps dired-mode-map
+;;  "." 'hydra-dired/body)
+
+(general-define-key
+ :keymaps 'company-active-map
+ "TAB"   'company-complete-selection
+ "C-/"   'company-search-candidates
+ "C-M-/" 'company-filter-candidates
+ "C-d"   'company-show-doc-buffer)
+
+(general-define-key
+ :keymaps 'mu4e-headers-mode-map
+ "."   'hydra-mu4e-headers/body
+ "o"   'my/org-capture-mu4e) ;; TODO: write this function
 
 (use-package vimish-fold
   :config

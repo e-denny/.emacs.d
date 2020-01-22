@@ -8,7 +8,7 @@
 
 (use-package flycheck
   :ensure t
-  :diminish "✓"
+  :diminish " ✓"
   :commands global-flycheck-mode
   :init (add-hook 'prog-mode-hook 'global-flycheck-mode)
   :config
@@ -38,28 +38,6 @@
      '(flycheck-python-flake8-executable "python3")
      '(flycheck-python-pycompile-executable "python3")
      '(flycheck-python-pylint-executable "python3"))))
-
-(defhydra hydra-flycheck (:color pink)
-  "
-^
-^Flycheck^          ^Errors^            ^Checker^
-^────────^──────────^──────^────────────^───────^───────────
-_q_ quit            _<_ previous        _?_ describe
-_m_ manual          _>_ next            _d_ disable
-_v_ verify setup    _f_ check           _s_ select
-^^                  _l_ list            ^^
-^^                  ^^                  ^^
-"
-  ("q" nil)
-  ("<" flycheck-previous-error)
-  (">" flycheck-next-error)
-  ("?" flycheck-describe-checker :color blue)
-  ("d" flycheck-disable-checker :color blue)
-  ("f" flycheck-buffer)
-  ("l" flycheck-list-errors :color blue)
-  ("m" flycheck-manual :color blue)
-  ("s" flycheck-select-checker :color blue)
-  ("v" flycheck-verify-setup :color blue))
 
 (provide 'flycheck-setup)
 

@@ -56,19 +56,19 @@
     ;;make paren highlight update after stuff like paredit changes
     (add-to-list 'after-change-functions '(lambda (&rest x) (hl-paren-highlight)))))
 
-(use-package highlight-indent-guides
-  :diminish highlight-indent-guides-mode
-  :config
-  (setq highlight-indent-guides-method 'character)
-  ;; Indent character samples: | ┆ ┊
-  (setq highlight-indent-guides-character ?\|)
-  (setq highlight-indent-guides-responsive 'top
-        highlight-indent-guides-auto-odd-face-perc 0
-        highlight-indent-guides-auto-even-face-perc 0)
-  ;; (setq highlight-indent-guides-auto-enabled nil)
-  ;; (set-face-background 'highlight-indent-guides-odd-face "gray")
-  ;; (set-face-background 'highlight-indent-guides-even-face "gray")
-  (add-hook 'prog-mode-hook 'highlight-indent-guides-mode))
+;; (use-package highlight-indent-guides
+;;   :diminish highlight-indent-guides-mode
+;;   :config
+;;   (setq highlight-indent-guides-method 'character)
+;;   ;; Indent character samples: | ┆ ┊
+;;   (setq highlight-indent-guides-character ?\|)
+;;   (setq highlight-indent-guides-responsive 'top
+;;         highlight-indent-guides-auto-odd-face-perc 0
+;;         highlight-indent-guides-auto-even-face-perc 0)
+;;   ;; (setq highlight-indent-guides-auto-enabled nil)
+;;   ;; (set-face-background 'highlight-indent-guides-odd-face "gray")
+;;   ;; (set-face-background 'highlight-indent-guides-even-face "gray")
+;;   (add-hook 'prog-mode-hook 'highlight-indent-guides-mode))
 
 (provide 'elisp-coding-setup)
 

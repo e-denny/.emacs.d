@@ -11,17 +11,18 @@
   "Clear existing theme settings instead of layering them."
   (mapc #'disable-theme custom-enabled-themes))
 
-;; (use-package gruvbox-theme
-;;   :ensure t)
-;; (load-theme 'gruvbox-dark-soft t)
-
 (use-package leuven-theme
-  :ensure t)
-(load-theme 'leuven t)
-
-;; (use-package zenburn-theme
-;;   :ensure t)
-;; (load-theme 'zenburn t)
+  :config
+  (load-theme 'leuven t)
+  (let ((line (face-attribute 'mode-line :underline)))
+    (set-face-attribute 'mode-line          nil  :overline   line)
+    (set-face-attribute 'mode-line-inactive nil  :foreground "black" :overline   line)
+    (set-face-attribute 'mode-line-inactive nil  :underline  line)
+    (set-face-attribute 'mode-line-emphasis nil  :foreground "black")
+    (set-face-attribute 'mode-line-highlight nil :foreground "black")
+    (set-face-attribute 'mode-line-buffer-id nil :foreground "black")
+    (set-face-attribute 'mode-line          nil  :box        nil)
+    (set-face-attribute 'mode-line-inactive nil  :box        nil)))
 
 (provide 'theme-setup)
 

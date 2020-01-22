@@ -57,6 +57,20 @@
         ivy-rich-switch-buffer-align-virtual-buffer t
         ivy-rich-path-style 'abbrev))
 
+;; Show ivy frame using posframe
+;; (use-package ivy-posframe
+;;   :config
+;; ;;  (setq ivy-posframe-display-functions-alist '((t . ivy-posframe-display-at-frame-bottom-left)))
+;;   (setq ivy-posframe-display-functions-alist '((t . ivy-posframe-display-at-frame-top-center)))
+;;   (setq ivy-posframe-width 130)
+;;   (setq ivy-posframe-height 12)
+;;   (setq ivy-posframe-parameters
+;;         '((parent-frame . nil)
+;;           (left-fringe . 5)
+;;           (right-fringe . 5)))
+;;   :hook
+;;   (ivy-mode . ivy-posframe-mode))
+
 (use-package swiper
   :commands (swiper
              swiper-all))

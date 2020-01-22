@@ -1,4 +1,4 @@
-;;; flycheck-setup.el --- Magit Setup -*- coding: utf-8; lexical-binding: t; -*-
+;;; magit-setup.el --- Magit Setup -*- coding: utf-8; lexical-binding: t; -*-
 
 ;;; Commentary:
 
@@ -9,13 +9,6 @@
 (use-package magit
   :ensure t
   :bind ("C-c m" . magit-status))
-
-;; | Key Binding | Command                  |
-;; |-------------+--------------------------|
-;; | C-x p       | git-gutter:previous-hunk |
-;; | C-x n       | git-gutter:next-hunk     |
-;; | C-x v =     | git-gutter:popup-hunk    |
-;; | C-x v r     | git-gutter:revert-hunk   |
 
 (use-package git-gutter
   :ensure t
@@ -36,10 +29,7 @@
     (set-face-background 'git-gutter:modified "none")
     (set-face-background 'git-gutter:added "none")
     (set-face-background 'git-gutter:deleted "none"))
-  :bind (("C-x p" . git-gutter:previous-hunk)
-         ("C-x n" . git-gutter:next-hunk)
-         ("C-x v =" . git-gutter:popup-hunk)
-         ("C-x v r" . git-gutter:revert-hunk)))
+)
 
 (provide 'magit-setup)
 

@@ -17,6 +17,15 @@
         which-key-add-column-padding 1)
   (which-key-mode +1))
 
+;; (use-package which-key-posframe
+;;   :config
+;;   (setq which-key-posframe-parameters
+;;         '((parent-frame . nil)
+;;           (left-fringe . 5)
+;;           (right-fringe . 5)))
+;;   (setq which-key-posframe-poshandler 'posframe-poshandler-frame-bottom-left-corner)
+;;   (which-key-posframe-mode))
+
 (use-package free-keys
   :commands (free-keys)
   :bind ("C-~" . free-keys))

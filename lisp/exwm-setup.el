@@ -66,6 +66,10 @@
             ;; Firefox: focus search bar: C-l
             )))
   (setq save-interprogram-paste-before-kill t)
+
+  (require 'exwm-systemtray)
+  (exwm-systemtray-enable)
+
   (exwm-enable)
   (exwm-config-misc)
 

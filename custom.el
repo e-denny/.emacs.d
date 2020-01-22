@@ -24,7 +24,7 @@
     ("#CC9393" "#DFAF8F" "#F0DFAF" "#7F9F7F" "#BFEBBF" "#93E0E3" "#94BFF3" "#DC8CC3")))
  '(package-selected-packages
    (quote
-    (avy 0blayout 0x0 vimish-fold general evil-leader evil-surround evil-escape evil treemacs-magit treemacs-projectile treemacs fish-completion macrostep fish-mode elisp-slime-nav highlight-indent-guides buffer-move system-packages pdf-tools multiple-cursors browse-kill-ring flyspell-correct-ivy leuven-theme doneburn-theme dired-narrow dired-subtree smex flx eshell-prompt-extras eshell-git-prompt dimmer beacon use-package-hydra gruvbox anzu dashboard ivy-hydra counsel-org-capture-string counsel-notmuch counsel all-the-icons-ivy mu4e elfeed-goodies elfeed org-bullets sx dap-mode company-lsp lsp-ui lsp-mode rainbow-mode popwin company free-keys winum doom-modeline git-gutter spaceline-all-the-icons diminish all-the-icons-dired highlight-parentheses which-key rainbow-delimiters paredit guide-key smart-mode-line xelb exwm gruvbox-dark-soft-theme gruvbox-theme projectile magit use-package neotree)))
+    (moody vscode-icon dired-sidebar which-key-posframe ivy-posframe avy 0blayout 0x0 vimish-fold general evil-leader evil-surround evil-escape evil treemacs-magit treemacs-projectile treemacs fish-completion macrostep fish-mode elisp-slime-nav highlight-indent-guides buffer-move system-packages pdf-tools multiple-cursors browse-kill-ring flyspell-correct-ivy leuven-theme doneburn-theme dired-narrow dired-subtree smex flx eshell-prompt-extras eshell-git-prompt dimmer beacon use-package-hydra gruvbox anzu dashboard ivy-hydra counsel-org-capture-string counsel-notmuch counsel all-the-icons-ivy mu4e elfeed-goodies elfeed org-bullets sx dap-mode company-lsp lsp-ui lsp-mode rainbow-mode popwin company free-keys winum doom-modeline git-gutter spaceline-all-the-icons diminish all-the-icons-dired highlight-parentheses which-key rainbow-delimiters paredit guide-key smart-mode-line xelb exwm gruvbox-dark-soft-theme gruvbox-theme projectile magit use-package neotree)))
  '(send-mail-function (quote smtpmail-send-it))
  '(use-package-compute-statistics t)
  '(vc-annotate-background "#2B2B2B")
@@ -54,5 +54,5 @@
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
- '(default ((t (:inherit nil :stipple nil :inverse-video nil :box nil :strike-through nil :overline nil :underline nil :slant normal :weight normal :height 89 :width normal :foundry "CYEL" :family "Iosevka"))))
+ '(default ((t (:inherit nil :stipple nil :background "#FFFFFF" :foreground "#333333" :inverse-video nil :box nil :strike-through nil :overline nil :underline nil :slant normal :weight normal :height 55 :width normal :foundry "CYEL" :family "Iosevka"))))
  '(org-document-title ((t (:foreground "#171717" :weight bold :height 1.5)))))
