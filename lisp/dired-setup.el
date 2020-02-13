@@ -73,6 +73,18 @@
   (setq dired-sidebar-use-term-integration t)
   (setq dired-sidebar-use-custom-font t))
 
+;; colorful dired
+(use-package diredfl
+    :ensure t
+    :config
+    (diredfl-global-mode 1))
+
+;; show git logs
+(use-package dired-git-info
+    :ensure t
+    :bind (:map dired-mode-map
+                (")" . dired-git-info-mode)))
+
 (provide 'dired-setup)
 
 ;;; dired-setup.el ends here

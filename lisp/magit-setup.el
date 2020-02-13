@@ -31,6 +31,11 @@
     (set-face-background 'git-gutter:deleted "none"))
 )
 
+;; exwm fix to get magit-ediff to work
+(use-package ediff
+  :config (set 'ediff-window-setup-function 'ediff-setup-windows-plain))
+
+
 (provide 'magit-setup)
 
 ;;; magit-setup.el ends here

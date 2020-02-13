@@ -6,14 +6,15 @@
 
 ;;; Code:
 
-(defun my/start-daemons ()
+(when (equal system-type 'gnu/linux)
+  (defun my/start-daemons ()
   "Start some daemons.  Hooks into `after-init-hook'."
   (start-process "" nil "nm-applet") ; Networkmanager
   (start-process "" nil "syncthing-gtk" "--minimized")
   (start-process "" nil "blueman-applet")
   (start-process "" nil "redshift-gtk"))
 
-(add-hook 'after-init-hook 'my/start-daemons)
+  (add-hook 'after-init-hook 'my/start-daemons))
 
 (add-to-list 'initial-frame-alist '(fullscreen . fullheight))
 (add-to-list 'default-frame-alist '(internal-border-width . 7))
@@ -31,7 +32,6 @@
 (setq display-time-default-load-average nil)
 (setq display-time-mail-file 'no)
 (display-time-mode 1)
-
 
 (fset 'yes-or-no-p 'y-or-n-p)
 (show-paren-mode 1)
@@ -74,8 +74,6 @@
   fast-but-imprecise-scrolling nil
   jit-lock-defer-time 0)
 
-
-
 ; don't load old bype code
 (setq load-prefer-newer t)
 
@@ -89,9 +87,9 @@
 
 ;; (setq browse-url-browser-function 'eww-browse-url)
 
-(setq gnus-button-url 'browse-url-generic
-      browse-url-generic-program "firefox"
-      browse-url-browser-function gnus-button-url)
+;; (setq gnus-button-url 'browse-url-generic
+;;       browse-url-generic-program "firefox"
+;;       browse-url-browser-function gnus-button-url)
 
 (add-hook 'prog-mode-hook
                (lambda ()

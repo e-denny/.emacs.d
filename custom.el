@@ -11,7 +11,7 @@
    (quote
     ("585942bb24cab2d4b2f74977ac3ba6ddbd888e3776b9d2f993c5704aa8bb4739" default)))
  '(dashboard-center-content t)
- '(dashboard-items (quote ((recents . 15) (projects . 5) (bookmarks . 5))) t)
+ '(dashboard-items (quote ((recents . 15) (projects . 5) (bookmarks . 5))))
  '(fci-rule-color "#383838")
  '(flycheck-python-flake8-executable "python3")
  '(flycheck-python-pycompile-executable "python3")
@@ -22,9 +22,25 @@
  '(nrepl-message-colors
    (quote
     ("#CC9393" "#DFAF8F" "#F0DFAF" "#7F9F7F" "#BFEBBF" "#93E0E3" "#94BFF3" "#DC8CC3")))
+ '(org-agenda-custom-commands
+   (quote
+    (("c" "Super Agenda" agenda
+      (org-super-agenda-mode)
+      ((org-super-agenda-groups
+        (quote
+         ((:name "Today" :time-grid t :scheduled today)
+          (:name "Due Today" :deadline today)
+          (:name "Important" :priority "A")
+          (:name "Overdue" :deadline past)
+          (:name "Due soon" :deadline future)
+          (:name "Waiting" :todo "WAITING")))))
+      (org-agenda nil "a")))))
+ '(org-agenda-files
+   (quote
+    ("/home/edgar/Notes/BAC_ZeroPII.org" "/home/edgar/Notes/Complete.org" "/home/edgar/Notes/Inbox.org" "/home/edgar/Notes/Mesobase.org" "/home/edgar/Notes/NBA.org" "/home/edgar/Notes/NatGeo.org" "/home/edgar/Notes/Other_BAC.org" "/home/edgar/Notes/SunTrust.org" "/home/edgar/Notes/Tickler.org" "/home/edgar/Notes/Unite.org" "/home/edgar/Notes/cal.org" "/home/edgar/Notes/epsilon.org" "/home/edgar/Notes/gcal.org" "/home/edgar/Notes/personal.org" "/home/edgar/Notes/project.org")))
  '(package-selected-packages
    (quote
-    (moody vscode-icon dired-sidebar which-key-posframe ivy-posframe avy 0blayout 0x0 vimish-fold general evil-leader evil-surround evil-escape evil treemacs-magit treemacs-projectile treemacs fish-completion macrostep fish-mode elisp-slime-nav highlight-indent-guides buffer-move system-packages pdf-tools multiple-cursors browse-kill-ring flyspell-correct-ivy leuven-theme doneburn-theme dired-narrow dired-subtree smex flx eshell-prompt-extras eshell-git-prompt dimmer beacon use-package-hydra gruvbox anzu dashboard ivy-hydra counsel-org-capture-string counsel-notmuch counsel all-the-icons-ivy mu4e elfeed-goodies elfeed org-bullets sx dap-mode company-lsp lsp-ui lsp-mode rainbow-mode popwin company free-keys winum doom-modeline git-gutter spaceline-all-the-icons diminish all-the-icons-dired highlight-parentheses which-key rainbow-delimiters paredit guide-key smart-mode-line xelb exwm gruvbox-dark-soft-theme gruvbox-theme projectile magit use-package neotree)))
+    (helm-ls-git org-sidebar org-ql org-gcal org-caldav swiper-helm helm-xref helm-swoop helm-projectile helm-rg helm-org-rifle helm-org helm-flycheck helm-exwm helm-descbinds helm-ag helm doom-modeline org-mu4e counsel-projectile moody vscode-icon dired-sidebar which-key-posframe ivy-posframe avy 0blayout 0x0 vimish-fold general treemacs-magit treemacs-projectile treemacs fish-completion macrostep fish-mode elisp-slime-nav highlight-indent-guides buffer-move system-packages pdf-tools multiple-cursors browse-kill-ring flyspell-correct-ivy leuven-theme doneburn-theme dired-narrow dired-subtree smex flx eshell-prompt-extras eshell-git-prompt dimmer beacon use-package-hydra gruvbox anzu dashboard ivy-hydra counsel-org-capture-string counsel all-the-icons-ivy mu4e elfeed-goodies elfeed org-bullets sx dap-mode company-lsp lsp-ui lsp-mode rainbow-mode popwin company free-keys winum git-gutter spaceline-all-the-icons diminish all-the-icons-dired highlight-parentheses which-key rainbow-delimiters paredit guide-key smart-mode-line xelb exwm gruvbox-dark-soft-theme gruvbox-theme projectile magit use-package neotree)))
  '(send-mail-function (quote smtpmail-send-it))
  '(use-package-compute-statistics t)
  '(vc-annotate-background "#2B2B2B")
@@ -55,4 +71,10 @@
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  '(default ((t (:inherit nil :stipple nil :background "#FFFFFF" :foreground "#333333" :inverse-video nil :box nil :strike-through nil :overline nil :underline nil :slant normal :weight normal :height 55 :width normal :foundry "CYEL" :family "Iosevka"))))
- '(org-document-title ((t (:foreground "#171717" :weight bold :height 1.5)))))
+ '(mode-line ((t (:background "dim gray" :foreground "white smoke" :box nil))))
+ '(mode-line-buffer-id ((t (:foreground "white" :weight bold))))
+ '(mode-line-emphasis ((t (:foreground "white" :weight bold))))
+ '(org-document-title ((t (:foreground "#171717" :weight bold :height 1.5))))
+ '(powerline-active0 ((t (:inherit mode-line :background "gray20" :foreground "white smoke"))))
+ '(powerline-active1 ((t (:inherit mode-line :background "gray40" :foreground "white smoke"))))
+ '(powerline-active2 ((t (:inherit mode-line :background "gray60" :foreground "black")))))

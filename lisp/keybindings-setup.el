@@ -18,7 +18,7 @@
 
 (defhydra hydra-help (:columns 4)
   ("v" counsel-describe-variable "Desc Variable")
-  ("w" counsel-descbinds "Desc Bindings")
+  ("w" helm-descbinds "Desc Bindings")
   ("s" describe-syntax "Desc Syntax")
   ("P" describe-package "Desc Package")
   ("o" describe-symbol "Desc Symbols")
@@ -239,6 +239,20 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   (start-process-shell-command command nil command))
 
 ;;; Global Keybindings
+<<<<<<< HEAD
+(general-define-key
+ "s-w"    '(:ignore t :which-key "window")
+ "s-w l"  'windmove-right
+ "s-w j"  'windmove-left
+ "s-w i"  'windmove-up
+ "s-w k"  'windmove-down
+ "s-w v"  'split-window-right
+ "s-w c"  'split-window-below
+ "s-w d"  'delete-window
+ "s-w +"  'enlarge-window
+ "s-w ."  'enlarge-window-horizontally
+ "s-w ,"  'shrink-window-horizontally
+=======
 
 (general-define-key
  "s-w"    '(:ignore t :which-key "window")
@@ -253,30 +267,33 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  ;; "s-w -"  'evil-window-decrease-height
  ;; "s-w >"  'evil-window-increase-width
  ;; "s-w <"  'evil-window-increase-width
+>>>>>>> 9f0abcd... clean ups
  "s-w ="  'balance-windows
  "s-w d"  'delete-window
  "s-w z"  'delete-other-windows
  "s-w t"  'exwm-floating-toggle-floating
 
- "s-SPC" 'counsel-M-x
+ "s-SPC" 'helm-M-x
 
  "s-b"   '(:ignore t :which-key "buffer")
- "s-b b" 'ivy-switch-buffer
+ "s-b b" 'helm-mini
  "s-b d" 'kill-buffer
  "s-b p" 'previous-buffer
  "s-b n" 'next-buffer
  "s-b i" 'counsel-ibuffer
 
  "s-c"   '(:ignore t :which-key "code")
- "s-c l" 'counsel-find-library
- "s-c s" 'counsel-info-lookup-symbol
- "s-c u" 'counsel-unicode-char
+ "s-c l" 'helm-locate-library
+ "s-c s" 'helm-info-at-point
+ "s-c u" 'helm-ucs
 
  "s-k d" 'general-describe-keybindings
 
  "s-f"   '(:ignore t :which-key "file")
- "s-f f" 'counsel-find-file
+ "s-f f" 'helm-find-files
  "s-f s" 'save-buffer
+ "s-f r" 'helm-recentf
+ "s-f t" 'treemacs
  "s-f r" 'counsel-recentf
  "s-f d" 'dired-sidebar-toggle-sidebar
 
@@ -284,9 +301,11 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "s-l a" 'my/shell-command
 
  "s-s"   '(:ignore t :which-key "search")
- "s-s s" 'swiper
- "s-s p" 'swiper-thing-at-point
+ "s-s s" 'helm-swoop-without-pre-input
+ "s-s p" 'helm-swoop
  "s-s i" 'swiper-isearch
+ "s-s a" 'helm-multi-swoop
+ "s-s r" 'helm-rg
  "s-s a" 'swiper-all
  "s-s r" 'counsel-rg
  "s-s g" 'counsel-grep-or-swiper
@@ -299,6 +318,7 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "s-g d" 'magit-diff
  "s-g c" 'magit-commit
  "s-g p" 'magit-push
+ "s-g G" 'helm-browse-project
  "s-g G" 'counsel-git
  "s-g n" 'git-gutter:next-hunk
  "s-g p" 'git-gutter:previous-hunk
@@ -306,6 +326,20 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "s-g r" 'git-gutter:revert-hunk
  "s-g l" 'counsel-git-log
  "s-g g" 'counsel-git-grep
+<<<<<<< HEAD
+
+ "s-j"   '(:ignore t :which-key "jump")
+ "s-j i" 'helm-semantic-or-imenu
+ "s-j o" 'helm-occur
+ "s-j l" 'helm-locate-library
+
+ "s-p"   '(:ignore t :which-key "project")
+ "s-p r" 'helm-projectile-rg
+ "s-p f" 'helm-projectile-find-file
+ "s-p s" 'helm-projectile-switch-project
+ "s-p b" 'helm-projectile-switch-to-buffer
+=======
+>>>>>>> 9f0abcd... clean ups
 
  "s-j"   '(:ignore t :whick-key "jump")
  "s-j i" 'counsel-imenu
@@ -327,9 +361,20 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "s-v v" 'ivy-switch-view
 
  "s-x"   '(:ignore t :which "minibuffer")
- "s-x h" 'counsel-minibuffer-history
+ "s-x h" 'helm-minibuffer-history
 
  "s-<tab>" 'company-complete
+<<<<<<< HEAD
+
+ "s-o"   '(:ignore t :which "org")
+ "s-o m") 'org-mu4e-store-and-capture
+
+(general-define-key
+ :keymaps 'projectile-mode-map
+ "s-p" '(:ignore t :which "projectile mode map")
+ "s-p p" 'projectile-command-map)
+
+=======
  )
 
 ;;; Mode Keybindings
@@ -339,6 +384,7 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "s-p" '(:ignore t :which "projectile mode map")
  "s-p p" 'projectile-command-map)
 
+>>>>>>> 9f0abcd... clean ups
 ;; (general-define-key
 ;;  :keymaps dired-mode-map
 ;;  "." 'hydra-dired/body)
@@ -355,29 +401,123 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "."   'hydra-mu4e-headers/body
  "o"   'my/org-capture-mu4e) ;; TODO: write this function
 
-(use-package vimish-fold
-  :config
+<<<<<<< HEAD
+(defhydra hydra-navigate (:color red
+                          :hint nil)
+  "_f_: forward-char       _w_: forward-word       _n_: next-line_b_:
+backward-char      _W_: backward-word      _p_: previous-line^ ^
+              _o_: subword-right      _,_: beginning-of-line^ ^
+             _O_: subword-left       _._: end-of-line
+_s_: forward sentence   _a_: forward paragraph  _g_: forward page_S_:
+backward sentence  _A_: backward paragraph _G_: backward page
+_h_: helm mini _B_: buffer list _i_: window_<left>_: previous buffer
+_<right>_: next buffer_<up>_: scroll-up           _<down>_:
+scroll-down
+_[_: backward-sexp _]_: forward-sexp_<_ beginning of buffer _>_ end of
+buffer _m_: set mark _/_: jump to mark"
+  ("f" forward-char)
+  ("b" backward-char)
+  ("w" forward-word)
+  ("W" backward-word)
+  ("n" next-line)
+  ("p" previous-line)
+  ("o" subword-right)
+  ("O" subword-left)
+  ("s" forward-sentence)
+  ("S" backward-sentence)
+  ("a" forward-paragraph)
+  ("A" backward-paragraph)
+  ("g" forward-page)
+  ("G" backward-page)
+  ("<right>" next-buffer)
+  ("<left>" previous-buffer)
+  ("h" helm-mini :color blue)
+  ("i" ace-window :color blue)
+  ("m" org-mark-ring-push)
+  ("/" org-mark-ring-goto :color blue)
+  ("B" helm-buffers-list)
+  ("<up>" scroll-up)
+  ("<down>" scroll-down)
+  ("<" beginning-of-buffer)
+  (">" end-of-buffer)
+  ("." end-of-line)
+  ("[" backward-sexp)
+  ("]" forward-sexp)
+  ("," beginning-of-line)
+  ("q" nil "quit" :color blue))
 
-  (defhydra hydra-vimish-fold (:color pink :hint nil :delay 0.5)
-    "
-Vimish Fold
------------
-[_f_]old    [_d_]elete    [_u_]nfold    [_r_]efold    [_t_]oggle
-    Prefix CTRL for `*-all' variants
-[_a_]vy  [_q_]uit
-"
-    ("f" vimish-fold)
-    ("C-f" vimish-fold-all)
-    ("d" vimish-fold-delete)
-    ("C-d" vimish-fold-delete-all)
-    ("u" vimish-unfold)
-    ("C-u" vimish-fold-unfold-all)
-    ("r" vimish-fold-refold)
-    ("C-r" vimish-fold-refold-all)
-    ("t" vimish-fold-toggle)
-    ("C-t" vimish-fold-toggle-all)
-    ("a" vimish-fold-avy)
-    ("q" nil :color blue)))
+(defhydra hydra-smartparens (:hint nil)
+     "
+  Moving^^^^                       Slurp & Barf^^   Wrapping^^            Sexp juggling^^^^               Destructive
+ ------------------------------------------------------------------------------------------------------------------------
+  [_a_] beginning  [_n_] down      [_h_] bw slurp   [_R_] rewrap        [_S_] split   [_t_] transpose   [_c_] change inner  [_w_] copy
+  [_e_] end        [_N_] bw down   [_H_] bw barf    [_u_] unwrap        [_s_] splice  [_A_] absorb      [_C_] change outer  [_M-k_] kill inside
+  [_f_] forward    [_p_] up        [_l_] slurp      [_U_] bw unwrap     [_r_] raise   [_E_] emit        [_k_] kill          [_g_] quit
+  [_b_] backward   [_P_] bw up     [_L_] barf       [_(__{__[__'__\"_] wrap      [_j_] join    [_o_] convolute   [_K_] bw kill       [_q_] quit"
+     ;; Moving
+     ("a" sp-beginning-of-sexp)
+     ("e" sp-end-of-sexp)
+     ("f" sp-forward-sexp)
+     ("b" sp-backward-sexp)
+     ("n" sp-down-sexp)
+     ("N" sp-backward-down-sexp)
+     ("p" sp-up-sexp)
+     ("P" sp-backward-up-sexp)
+
+     ;; Slurping & barfing
+     ("h" sp-backward-slurp-sexp)
+     ("H" sp-backward-barf-sexp)
+     ("l" sp-forward-slurp-sexp)
+     ("L" sp-forward-barf-sexp)
+
+     ;; Wrapping
+     ("R" sp-rewrap-sexp)
+     ("u" sp-unwrap-sexp)
+     ("U" sp-backward-unwrap-sexp)
+     ("(" sp-wrap-round)
+     ("{" sp-wrap-curly)
+     ("[" sp-wrap-square)
+     ("'" my/sp-wrap-single-quote)
+     ("\"" my/sp-wrap-double-quote)
+
+     ;; Sexp juggling
+     ("S" sp-split-sexp)
+     ("s" sp-splice-sexp)
+     ("r" sp-raise-sexp)
+     ("j" sp-join-sexp)
+     ("t" sp-transpose-sexp)
+     ("A" sp-absorb-sexp)
+     ("E" sp-emit-sexp)
+     ("o" sp-convolute-sexp)
+
+     ;; Destructive editing
+     ("c" sp-change-inner :exit t)
+     ("C" sp-change-enclosing :exit t)
+     ("k" sp-kill-sexp)
+     ("K" sp-backward-kill-sexp)
+     ("M-k" my/sp-kill-inside-sexp)
+     ("w" sp-copy-sexp)
+
+     ("q" nil)
+     ("g" nil))
+
+(use-package dumb-jump
+  :general
+  (my/all-states-keys
+    :states '(insert emacs normal)
+    "M-g o" 'dumb-jump-go-other-window
+    "M-g g" 'dumb-jump-go
+    "M-g l" 'dumb-jump-quick-look
+    "M-g x" 'dumb-jump-go-prefer-external
+    "M-g z" 'dumb-jump-go-prefer-external-other-window)
+=======
+(use-package vimish-fold
+>>>>>>> 9f0abcd... clean ups
+  :config
+  (progn
+    (setq dumb-jump-selector 'ivy)))
+
+;; (use-package pretty-hydra)
 
 ;; (ace-link-setup-default)
 ;; dumb jump and ivy integration

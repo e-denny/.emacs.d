@@ -29,13 +29,20 @@
           `(("i" "Todo [inbox]" entry
              (file+headline ,(format "%s/%s" org-directory "Inbox.org") "Inbox")
              "* TODO %i%?")
-            ("t" "todo" entry (file+headline ,(format "%s/%s" org-directory "Inbox.org") "Tasks")
-             "* TODO [#A] %?\nSCHEDULED: %(org-insert-time-stamp (org-read-date nil t \"+0d\"))\n")
+            ("w" "Web site" entry
+             (file "")
+             "* %a :website:\n\n%U %?\n\n%:initial")
+            ("M" "mu4e with kill" entry
+             (file+headline ,(format "%s/%s" org-directory "Inbox.org") "Inbox")
+             "* TODO %a %?\nSCHEDULED: %(org-insert-time-stamp (org-read-date nil t \"+0d\")) \n %c \n")
+            ("m" "mu4e" entry
+             (file+headline ,(format "%s/%s" org-directory "Inbox.org") "Inbox")
+             "* TODO %a %?\nSCHEDULED: %(org-insert-time-stamp (org-read-date nil t \"+0d\"))\n")
             ("T" "Tickler" entry
              (file+headline ,(format "%s/%s" org-directory "Tickler.org") "Tickler")
              "* %i%? \n %^t")))
-    (setq org-refile-targets '((nil :maxlevel . 9)
-                               (org-agenda-files :maxlevel . 9)))
+    (setq org-refile-targets '((nil :maxlevel . 4)
+                               (org-agenda-files :maxlevel . 4)))
     (setq org-return-follows-link t)
     (setq org-outline-path-complete-in-steps nil)
     (setq org-refile-allow-creating-parent-nodes 'confirm)
@@ -60,6 +67,7 @@
     (setq org-agenda-skip-scheduled-if-done t)
     (setq org-deadline-warning-days 7)
     (setq org-agenda-ndays 7)
+
     ;;don't show tasks that are scheduled or have deadlines in the
     ;;normal todo list
     (setq org-agenda-todo-ignore-deadlines 'all)
@@ -132,13 +140,88 @@
 
 (use-package org-bullets
   :ensure t
-  :commands org-bullets-mode
+;;  :commands org-bullets-mode
   :config
   (add-hook 'org-mode-hook
             (lambda ()
               (org-bullets-mode 1)))
-  (setq org-bullets-bullet-list '("⚫" "○" "◉" "◎" "✮" "✱" "✵")))
+  (setq org-bullets-bullet-list '("⚫" "○" "◉" "◎")))
 
+(use-package helm-org
+  :after (hem org)
+  :commands (helm-org-agenda-files-headings helm-org-in-buffer-headings helm-org-parent-headings
+                                            helm-org-completing-read-tags)
+  :config
+  (add-to-list 'helm-completing-read-handlers-alist '(org-capture . helm-org-completing-read-tags))
+  (add-to-list 'helm-completing-read-handlers-alist '(org-set-tags . helm-org-completing-read-tags))
+  )
+
+(use-package helm-org-rifle
+  :after (helm org)
+  :commands (helm-org-rifle helm-org-rifle-current-buffer helm-org-rifle-org-directory)
+  :config
+  (setq helm-org-rifle-show-path t))
+
+(use-package org-ql
+  :after org
+  :commands (org-ql-search org-ql-view org-ql-view-sidebar org-ql-sparse-tree helm-org-ql org-ql-block)
+  )
+
+(use-package org-super-agenda
+  :after org
+  :config (org-super-agenda-mode))
+
+(setq org-agenda-custom-commands
+      '(("c" "Super Agenda" agenda
+         (org-super-agenda-mode)
+         ((org-super-agenda-groups
+           '(
+             (:name "Today"
+                    :time-grid t
+                    :scheduled today)
+             (:name "Due Today"
+                    :deadline today)
+             (:name "Important"
+                    :priority "A")
+             (:name "Overdue"
+                    :deadline past)
+             (:name "Due soon"
+                    :deadline future)
+             (:name "Waiting"
+                    :todo "WAITING")
+             )))
+         (org-agenda nil "a"))
+        ("n" "Agenda"
+         ((agenda ""
+                  ((org-agenda-overriding-header "Scheduled")))
+          (todo "TODO"
+                ((org-agenda-overriding-header "Unscheduled")
+                 (org-agenda-skip-function
+                  (quote
+                   (org-agenda-skip-entry-if
+                    (quote scheduled)))))))
+         nil nil)))
+
+(use-package org-sidebar
+  :after org
+  :commands (org-sidebar-tree-toggle org-sidebar-toggle org-sidebar-ql)
+  :custom (org-sidebar-tree-side 'left))
+
+(setq package-check-signature nil)
+
+;; token: 4/wAFO2rD1bj_Dga_2HeH4qfV6N0RzJjHd2tXysrjaQbpTmGOUwWQpYA0
+(use-package org-gcal
+  :ensure t
+  :after org
+  :commands (org-gcal-sync org-gcal-fetch)
+  :config
+  (setq org-gcal-client-id "577056606825-kfucdrv8lcvmc6ld6641h6c6ddf3iod7.apps.googleusercontent.com"
+        org-gcal-client-secret "DtVI0DuOYvCZozCY5JkZG6O_"
+        org-gcal-file-alist `(("edgar1denny@gmail.com" .  ,(concat org-directory "/gcal.org"))
+                              ("59nii32e0b96o08lut9kc4mejrp5dinh@import.calendar.google.com". ,(concat org-directory "/cal.org"))))
+  ;; (add-hook 'org-agenda-mode-hook (lambda () (org-gcal-sync) ))
+  ;; (add-hook 'org-capture-after-finalize-hook (lambda () (org-gcal-sync) ))
+  )
 
 (provide 'org-setup)
 
