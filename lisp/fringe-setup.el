@@ -7,6 +7,7 @@
 ;;; Code:
 
 (use-package fringe
+  :ensure t
   :commands fringe-mode
   :config
   (set-fringe-mode '(8 . 0)))

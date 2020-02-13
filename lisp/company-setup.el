@@ -21,6 +21,10 @@
     (setq company-dabbrev-downcase nil))
   :diminish company-mode)
 
+;; company with icons
+(use-package company-box
+  :diminish company-box-mode
+  :hook (company-mode . company-box-mode))
 
 (provide 'company-setup)
 

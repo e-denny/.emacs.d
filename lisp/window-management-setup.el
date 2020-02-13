@@ -40,7 +40,8 @@
 (use-package dimmer
   :ensure t
   :config
-  (setq dimmer-fraction 0.25)
+  (setq dimmer-fraction 0.15)
+  (setq dimmer-adjustment-mode :both)
   (dimmer-mode 1))
 
 

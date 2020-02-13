@@ -24,6 +24,7 @@
   :ensure nil
   :config
   (progn
+    (require 'org-mu4e)
     (setq mu4e-maildir (expand-file-name "~/.mail")
           mu4e-attachment-dir "~/Downloads"
           mu4e-compose-signature-auto-include nil

@@ -17,6 +17,18 @@
   (setq projectile-completion-system 'ivy)
   (projectile-mode))
 
+(use-package counsel-projectile
+  :ensure t
+  :after (projectile counsel)
+  :commands
+  (counsel-projectile-rg
+   counsel-projectile-find-file
+   counsel-projectile-switch-project
+   counsel-projectile-switch-to-buffer
+   counsel-projectile-mode)
+  :config
+  (counsel-projectile-mode))
+
 (provide 'projectile-setup)
 
 ;;; projectile-setup.el ends here

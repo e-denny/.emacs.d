@@ -12,19 +12,39 @@
   :ensure ivy-hydra
   :commands (ivy-switch-buffer ivy-push-view ivy-pop-view)
   :hook (emacs-startup . ivy-mode)
-  ;;:init
-  ;;(add-hook 'emacs-startup-hook #'ivy-mode)
   :config
   (setq ivy-height 12
         ivy-do-completion-in-region nil
         ivy-wrap t
-        ivy-fixed-height-minibuffer t
+        ivy-fixed-height-minibuffer nil
         ivy-use-virtual-buffers t
         smex-completion-method 'ivy
         ivy-initial-inputs-alist nil
         ivy-format-function #'ivy-format-function-line
         ivy-magic-slash-non-match-action nil
         ivy-re-builders-alist '((t . ivy--regex-plus)))
+
+  ;; (defun my-ivy-display-function-window (text)
+  ;;   (let ((buffer (get-buffer-create "*ivy-candidate-window*"))
+  ;;         (str (with-current-buffer (get-buffer-create " *Minibuf-1*")
+  ;;                (let ((point (point))
+  ;;                      (string (concat (buffer-string) "  " text)))
+  ;;                  (ivy-add-face-text-property
+  ;;                   (- point 1) point 'ivy-cursor string t)
+  ;;                  string))))
+  ;;     (with-current-buffer buffer
+  ;;       (let ((inhibit-read-only t))
+  ;;         (erase-buffer)
+  ;;         (insert str)))
+  ;;     (with-ivy-window
+  ;;       (display-buffer
+  ;;        buffer
+  ;;        `((display-buffer-reuse-window
+  ;;           display-buffer-below-selected)
+  ;;          (window-height . ,(+ 3 (ivy--height (ivy-state-caller ivy-last)))))))))
+
+  ;; (setq ivy-display-functions-alist
+  ;;       '((t . my-ivy-display-function-window)))
 
   (defun my/save-ivy-views ()
     "Save ivy-views to file."
@@ -43,8 +63,7 @@
                (message "Loaded ivy-views from file %s." ivy-views-file))
       (message "File %s does not exist!" ivy-views-file)))
 
-  (my/load-ivy-views)
-  )
+  (my/load-ivy-views))
 
 (setq ivy-re-builders-alist
       '((t . ivy--regex-plus)))
