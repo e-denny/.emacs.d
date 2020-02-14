@@ -9,7 +9,7 @@
 (when (equal system-type 'gnu/linux)
   (defun my/start-daemons ()
   "Start some daemons.  Hooks into `after-init-hook'."
-  (start-process "" nil "nm-applet") ; Networkmanager
+  (start-process "" nil "nm-applet")
   (start-process "" nil "syncthing-gtk" "--minimized")
   (start-process "" nil "blueman-applet")
   (start-process "" nil "redshift-gtk"))
@@ -18,6 +18,9 @@
 
 (add-to-list 'initial-frame-alist '(fullscreen . fullheight))
 (add-to-list 'default-frame-alist '(internal-border-width . 7))
+
+(when (equal system-type 'windows-nt)
+  (setq inhibit-compacting-font-caches t))
 
 (blink-cursor-mode -1)
 (scroll-bar-mode -1)

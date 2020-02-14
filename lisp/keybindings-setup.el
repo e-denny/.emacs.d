@@ -239,7 +239,6 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   (start-process-shell-command command nil command))
 
 ;;; Global Keybindings
-<<<<<<< HEAD
 (general-define-key
  "s-w"    '(:ignore t :which-key "window")
  "s-w l"  'windmove-right
@@ -252,22 +251,6 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "s-w +"  'enlarge-window
  "s-w ."  'enlarge-window-horizontally
  "s-w ,"  'shrink-window-horizontally
-=======
-
-(general-define-key
- "s-w"    '(:ignore t :which-key "window")
- "s-w l"  '(windmove-right :which-key "move right")
- "s-w j"  '(windmove-left :which-key "move left")
- "s-w i"  '(windmove-up :which-key "move up")
- "s-w k"  '(windmove-down :which-key "move bottom")
- "s-w v"  '(split-window-right :which-key "split right")
- "s-w c"  '(split-window-below :which-key "split bottom")
- "s-w d "  '(delete-window :which-key "delete window")
- ;; "s-w +"  'evil-window-increase-height
- ;; "s-w -"  'evil-window-decrease-height
- ;; "s-w >"  'evil-window-increase-width
- ;; "s-w <"  'evil-window-increase-width
->>>>>>> 9f0abcd... clean ups
  "s-w ="  'balance-windows
  "s-w d"  'delete-window
  "s-w z"  'delete-other-windows
@@ -326,7 +309,6 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "s-g r" 'git-gutter:revert-hunk
  "s-g l" 'counsel-git-log
  "s-g g" 'counsel-git-grep
-<<<<<<< HEAD
 
  "s-j"   '(:ignore t :which-key "jump")
  "s-j i" 'helm-semantic-or-imenu
@@ -338,13 +320,6 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "s-p f" 'helm-projectile-find-file
  "s-p s" 'helm-projectile-switch-project
  "s-p b" 'helm-projectile-switch-to-buffer
-=======
->>>>>>> 9f0abcd... clean ups
-
- "s-j"   '(:ignore t :whick-key "jump")
- "s-j i" 'counsel-imenu
- "s-j o" 'ivy-occur
- "s-j l" 'counsel-find-library
 
  "s-h"   '(:ignore t :whick-key "hydra")
  "s-h h" '(hydra-help/body :which-key "help")
@@ -364,18 +339,9 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "s-x h" 'helm-minibuffer-history
 
  "s-<tab>" 'company-complete
-<<<<<<< HEAD
 
  "s-o"   '(:ignore t :which "org")
- "s-o m") 'org-mu4e-store-and-capture
-
-(general-define-key
- :keymaps 'projectile-mode-map
- "s-p" '(:ignore t :which "projectile mode map")
- "s-p p" 'projectile-command-map)
-
-=======
- )
+ "s-o m" 'org-mu4e-store-and-capture)
 
 ;;; Mode Keybindings
 
@@ -384,7 +350,6 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "s-p" '(:ignore t :which "projectile mode map")
  "s-p p" 'projectile-command-map)
 
->>>>>>> 9f0abcd... clean ups
 ;; (general-define-key
 ;;  :keymaps dired-mode-map
 ;;  "." 'hydra-dired/body)
@@ -401,7 +366,6 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "."   'hydra-mu4e-headers/body
  "o"   'my/org-capture-mu4e) ;; TODO: write this function
 
-<<<<<<< HEAD
 (defhydra hydra-navigate (:color red
                           :hint nil)
   "_f_: forward-char       _w_: forward-word       _n_: next-line_b_:
@@ -510,9 +474,6 @@ buffer _m_: set mark _/_: jump to mark"
     "M-g l" 'dumb-jump-quick-look
     "M-g x" 'dumb-jump-go-prefer-external
     "M-g z" 'dumb-jump-go-prefer-external-other-window)
-=======
-(use-package vimish-fold
->>>>>>> 9f0abcd... clean ups
   :config
   (progn
     (setq dumb-jump-selector 'ivy)))
