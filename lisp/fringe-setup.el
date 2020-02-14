@@ -6,9 +6,7 @@
 
 ;;; Code:
 
-(use-package fringe
-  :ensure t
-  :commands fringe-mode
+(use-package emacs
   :config
   (set-fringe-mode '(8 . 0)))
 

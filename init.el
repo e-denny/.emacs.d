@@ -37,7 +37,7 @@
 (require 'defaults-setup)
 (require 'exwm-setup)
 (require 'diminish-setup)
-;; (require 'fringe-setup)
+(require 'fringe-setup)
 (require 'treemacs-setup)
 (require 'helm-setup)
 (require 'flycheck-setup)
