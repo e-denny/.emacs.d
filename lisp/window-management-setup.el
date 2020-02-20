@@ -32,7 +32,7 @@
     (setq beacon-blink-duration 0.3)
     (setq beacon-blink-delay 0.3)
     (setq beacon-size 20)
-    (setq beacon-color "orange")
+    (setq beacon-color "grey")
     (add-to-list 'beacon-dont-blink-major-modes 'shell-mode)
     (add-to-list 'beacon-dont-blink-major-modes 'inferior-python-mode)
     (beacon-mode 1)))
@@ -48,10 +48,7 @@
 ;; move a buffer to another window in a specified direction
 (use-package buffer-move
   :ensure t
-  :bind (("C-c <s-up>" . buf-move-up)
-         ("C-c <s-down>" . buf-move-down)
-         ("C-c <s-left>" . buf-move-left)
-         ("C-c <s-right>" . buf-move-right)))
+  :commands (buf-move-up buf-move-down buf-move-left buf-move-right))
 
 ;; undo a change to a window configuration
 (use-package winner

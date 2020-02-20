@@ -1,4 +1,4 @@
-;;; org-setup.el --- Org Setup -*- coding: utf-8; lexical-binding: t; -*-
+ ;;; org-setup.el --- Org Setup -*- coding: utf-8; lexical-binding: t; -*-
 
 ;;; Commentary:
 
@@ -41,8 +41,7 @@
             ("T" "Tickler" entry
              (file+headline ,(format "%s/%s" org-directory "Tickler.org") "Tickler")
              "* %i%? \n %^t")))
-    (setq org-refile-targets '((nil :maxlevel . 4)
-                               (org-agenda-files :maxlevel . 4)))
+
     (setq org-return-follows-link t)
     (setq org-outline-path-complete-in-steps nil)
     (setq org-refile-allow-creating-parent-nodes 'confirm)
@@ -51,10 +50,21 @@
           org-src-tab-acts-natively t
           org-src-preserve-indentation t)
     (setq org-use-speed-commands t)
+
+    (add-to-list 'org-modules 'org-habit t)
+
+    ;; log TODO creation also
+    (setq org-treat-insert-todo-heading-as-state-change t)
+    ;; log into LOGBOOK drawer
+    (setq org-log-into-drawer t)
+
+    ;; show agenda from today rather than Monday
+    (setq org-agenda-start-on-weekday nil)
+
     (setq org-startup-indented t
           org-startup-truncated nil
-          org-ellipsis "....."
-          org-pretty-entities t
+          org-ellipsis " ▼"
+;;          org-pretty-entities t
           org-hide-emphasis-markers t
           org-return-follows-link t)
     (setq org-hide-emphasis-markers t)
@@ -83,9 +93,15 @@
                                (?B . (:background "LightSteelBlue"))
                                (?C . (:background "OliveDrab"))))
 
-    (setq org-agenda-span 'fortnight)
-    (setq org-refile-use-outline-path t)
+    ;; refile
+    (setq org-refile-targets '((nil :maxlevel . 4)
+                               (org-agenda-files :maxlevel . 4)))
+    (setq org-refile-use-outline-path 'file)
+    (setq org-outline-path-complete-in-steps nil)
+    (setq org-refile-allow-creating-parent-nodes 'confirm)
+
     (setq org-tags-column -90)
+
     (setq org-agenda-span 14)
     (setq org-todo-keywords '((sequence "TODO(t)" "IN-PROGRESS(p)" "WAITING(w)" "|" "DONE(d)")))
     (add-hook 'org-mode-hook (lambda () (setq fill-column 100)))
@@ -96,18 +112,6 @@
             ("IN-PROGRESS" . "green4")
             ("WAITING" . "red")
             ("COMPLETE" . "blue")))
-
-    (setq org-agenda-custom-commands
-          '(("n" "Agenda"
-             ((agenda ""
-                      ((org-agenda-overriding-header "Scheduled")))
-              (todo "TODO"
-                    ((org-agenda-overriding-header "Unscheduled")
-                     (org-agenda-skip-function
-                      (quote
-                       (org-agenda-skip-entry-if
-                        (quote scheduled)))))))
-             nil nil)))
 
     (setq org-clock-persist t)
     (org-clock-persistence-insinuate)
@@ -145,7 +149,7 @@
   (add-hook 'org-mode-hook
             (lambda ()
               (org-bullets-mode 1)))
-  (setq org-bullets-bullet-list '("⚫" "○" "◉" "◎")))
+  (setq org-bullets-bullet-list '("●" "○" "♦" "♢")))
 
 (use-package helm-org
   :after (hem org)
@@ -176,6 +180,8 @@
          (org-super-agenda-mode)
          ((org-super-agenda-groups
            '(
+             (:name "Habits"
+                    :habit t)
              (:name "Today"
                     :time-grid t
                     :scheduled today)
@@ -222,6 +228,26 @@
   ;; (add-hook 'org-agenda-mode-hook (lambda () (org-gcal-sync) ))
   ;; (add-hook 'org-capture-after-finalize-hook (lambda () (org-gcal-sync) ))
   )
+
+(use-package org-roam
+  :after org
+  :hook
+  ((org-mode . org-roam-mode)
+   (after-init . org-roam--build-cache-async) ;; optional!
+   )
+  :straight (:host github :repo "jethrokuan/org-roam" :branch "develop")
+  :custom
+  (org-roam-directory (cond ((equal system-type 'windows-nt) "c:/Users/edenny/Roam")
+                            ((equal system-type 'gnu/linux) "/home/edgar/Roam")))
+  :bind
+  ("C-c n l" . org-roam)
+  ("C-c n t" . org-roam-today)
+  ("C-c n f" . org-roam-find-file)
+  ("C-c n i" . org-roam-insert)
+  ("C-c n g" . org-roam-show-graph)
+  :config
+  (setq org-roam-buffer-width 0.4)
+  (setq org-roam-link-title-format "{{%s}}"))
 
 (provide 'org-setup)
 

@@ -20,7 +20,10 @@
 (add-to-list 'default-frame-alist '(internal-border-width . 7))
 
 (when (equal system-type 'windows-nt)
-  (setq inhibit-compacting-font-caches t))
+  (setq inhibit-compacting-font-caches t)
+  (setq w32-pass-lwindow-to-system nil)
+  (setq w32-lwindow-modifier 'super)
+  (w32-register-hot-key [s-b]))
 
 (blink-cursor-mode -1)
 (scroll-bar-mode -1)

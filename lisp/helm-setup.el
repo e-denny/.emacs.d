@@ -39,14 +39,16 @@
           helm-M-x-requires-pattern 0
           helm-ff-file-name-history-use-recentf t
           helm-echo-input-in-header-line t
-          helm-autoresize-max-height 0
-          helm-autoresize-min-height 20
+          helm-autoresize-max-height 40
+          helm-autoresize-min-height 40
           helm-M-x-fuzzy-match t)
     (setq helm-imenu-fuzzy-match t)
     (setq helm-locate-fuzzy-match t)
     (setq helm-recentf-fuzzy-match t)
     (setq helm-semantic-fuzzy-match t)
     (setq helm-buffers-fuzzy-matching t)
+    ;; hide helm sources lines
+    (set-face-attribute 'helm-source-header nil :height 0.1)
     (helm-autoresize-mode 1)
     (helm-mode 1)))
 

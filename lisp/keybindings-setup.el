@@ -9,7 +9,6 @@
 (use-package general
   :ensure t)
 
-
 ;;; Hydras
 
 (defhydra hydra-zoom ()
@@ -224,6 +223,46 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   ("j" mu4e~headers-jump-to-maildir)
   ("." nil))
 
+(defhydra hydra-navigate (:color red
+                          :hint nil)
+  "
+_f_: forward-char       _w_: forward-word       _n_: next-line
+_b_: backward-char      _W_: backward-word      _p_: previous-line
+_s_: forward sentence   _a_: forward paragraph  _g_: forward page
+_S_: backward sentence  _A_: backward paragraph _G_: backward page
+_[_: backward-sexp      _]_: forward-sexp
+_<up>_: scroll-up       _<down>_: scroll-down
+_d_: down-list          _u_: up-list
+_,_: beginning-of-line  _._: end-of-line
+_F_: end-of-defun       _B_: beginning-of-defun
+_<_ beginning of buffer _>_ end of buffer
+"
+  ("f" forward-char)
+  ("b" backward-char)
+  ("w" forward-word)
+  ("W" backward-word)
+  ("n" next-line)
+  ("p" previous-line)
+  ("s" forward-sentence)
+  ("S" backward-sentence)
+  ("a" forward-paragraph)
+  ("A" backward-paragraph)
+  ("g" forward-page)
+  ("G" backward-page)
+  ("F" end-of-defun)
+  ("B" beginning-of-defun)
+  ("<up>" scroll-up)
+  ("<down>" scroll-down)
+  ("u" up-list)
+  ("d" down-list)
+  ("<" beginning-of-buffer)
+  (">" end-of-buffer)
+  ("." end-of-line)
+  ("[" backward-sexp)
+  ("]" forward-sexp)
+  ("," beginning-of-line)
+  ("q" nil "quit" :color blue))
+
 ;;; Functions
 
 (defun ivy--matcher-desc ()
@@ -260,10 +299,14 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
 
  "s-b"   '(:ignore t :which-key "buffer")
  "s-b b" 'helm-mini
- "s-b d" 'kill-buffer
+ "s-b k" 'kill-buffer
  "s-b p" 'previous-buffer
  "s-b n" 'next-buffer
  "s-b i" 'counsel-ibuffer
+ "s-b u" 'buf-move-up
+ "s-b d" 'buf-move-down
+ "s-b l" 'buf-move-left
+ "s-b r" 'buf-move-right
 
  "s-c"   '(:ignore t :which-key "code")
  "s-c l" 'helm-locate-library
@@ -325,6 +368,7 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "s-h h" '(hydra-help/body :which-key "help")
  "s-h c" '(hydra-flycheck/body :which-key "flycheck")
  "s-h m" '(hydra-multiple-cursors/body :which-key "multiple-cursors")
+ "s-h n" '(hydra-navigate/body :which-key "navigate")
  "s-h r" '(hydra-rectangle/body)
  "s-h z" '(hydra-zoom/body :which-key "zoom")
 
@@ -342,6 +386,12 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
 
  "s-o"   '(:ignore t :which "org")
  "s-o m" 'org-mu4e-store-and-capture)
+
+;; Get prefixes to work in X applications
+(when (equal window-system 'x)
+  (push '?\s-b exwm-input-prefix-keys)
+  (push '?\s-f exwm-input-prefix-keys)
+  (push '?\s-w exwm-input-prefix-keys))
 
 ;;; Mode Keybindings
 
@@ -366,49 +416,7 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
  "."   'hydra-mu4e-headers/body
  "o"   'my/org-capture-mu4e) ;; TODO: write this function
 
-(defhydra hydra-navigate (:color red
-                          :hint nil)
-  "_f_: forward-char       _w_: forward-word       _n_: next-line_b_:
-backward-char      _W_: backward-word      _p_: previous-line^ ^
-              _o_: subword-right      _,_: beginning-of-line^ ^
-             _O_: subword-left       _._: end-of-line
-_s_: forward sentence   _a_: forward paragraph  _g_: forward page_S_:
-backward sentence  _A_: backward paragraph _G_: backward page
-_h_: helm mini _B_: buffer list _i_: window_<left>_: previous buffer
-_<right>_: next buffer_<up>_: scroll-up           _<down>_:
-scroll-down
-_[_: backward-sexp _]_: forward-sexp_<_ beginning of buffer _>_ end of
-buffer _m_: set mark _/_: jump to mark"
-  ("f" forward-char)
-  ("b" backward-char)
-  ("w" forward-word)
-  ("W" backward-word)
-  ("n" next-line)
-  ("p" previous-line)
-  ("o" subword-right)
-  ("O" subword-left)
-  ("s" forward-sentence)
-  ("S" backward-sentence)
-  ("a" forward-paragraph)
-  ("A" backward-paragraph)
-  ("g" forward-page)
-  ("G" backward-page)
-  ("<right>" next-buffer)
-  ("<left>" previous-buffer)
-  ("h" helm-mini :color blue)
-  ("i" ace-window :color blue)
-  ("m" org-mark-ring-push)
-  ("/" org-mark-ring-goto :color blue)
-  ("B" helm-buffers-list)
-  ("<up>" scroll-up)
-  ("<down>" scroll-down)
-  ("<" beginning-of-buffer)
-  (">" end-of-buffer)
-  ("." end-of-line)
-  ("[" backward-sexp)
-  ("]" forward-sexp)
-  ("," beginning-of-line)
-  ("q" nil "quit" :color blue))
+
 
 (defhydra hydra-smartparens (:hint nil)
      "
