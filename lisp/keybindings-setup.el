@@ -40,7 +40,8 @@
   "
     -----          |   ^_i_^   |    _d_elete    _k_ill
 Rectangle Mode     | _j_   _l_ |    _s_tring    _y_ank
-    -----          |   ^_k_^   |    _c_opy      _r_eset"
+    -----          |   ^_k_^   |    _c_opy      _r_eset
+"
   ("i" rectangle-previous-line nil)
   ("k" rectangle-next-line nil)
   ("j" rectangle-backward-char nil)
@@ -54,8 +55,9 @@ Rectangle Mode     | _j_   _l_ |    _s_tring    _y_ank
                   (deactivate-mark))
               (rectangle-mark-mode 1)) nil))
 
-(defhydra hydra-flycheck (:color blue)
-  "^Flycheck^          ^Errors^            ^Checker^
+(defhydra hydra-flycheck (:color blue :hint nil)
+  "
+^Flycheck^          ^Errors^            ^Checker^
 ^────────^──────────^──────^────────────^───────^───────────
 [_q_] quit          [_c_] check         [_s_] select
 [_v_] verify setup  [_n_] next          [_d_] disable
@@ -75,20 +77,20 @@ Rectangle Mode     | _j_   _l_ |    _s_tring    _y_ank
          (if (eq 'flycheck-display-errors-function 'flycheck-display-error-messages)
              (setq-local flycheck-display-error-function 'flycheck-inline)
            (setq-local flycheck-display-error-function 'flycheck-display-error-messages)))
-   :color amaranth)
+   :color pink)
   ("?" flycheck-describe-checker))
 
 
 (use-package multiple-cursors
-  ;; :disabled t
   :config
-  (defhydra hydra-multiple-cursors (:hint nil)
-    "^Up^            ^Down^        ^Other^
+  (defhydra hydra-multiple-cursors (:color red :hint nil)
+    "
+^Up^            ^Down^        ^Other^
 ----------------------------------------------
 [_p_]   Next    [_n_]   Next    [_l_] Edit lines
 [_P_]   Skip    [_N_]   Skip    [_a_] Mark all
 [_M-p_] Unmark  [_M-n_] Unmark  [_r_] Mark by regexp
-^ ^             ^ ^             [_q_] Quit
+[_q_] Quit
 "
     ("l" mc/edit-lines :exit t)
     ("a" mc/mark-all-like-this :exit t)
@@ -99,7 +101,7 @@ Rectangle Mode     | _j_   _l_ |    _s_tring    _y_ank
     ("P" mc/skip-to-previous-like-this)
     ("M-p" mc/unmark-previous-like-this)
     ("r" mc/mark-all-in-region-regexp :exit t)
-    ("q" nil)))
+    ("q" nil :color blue)))
 
 
 (defhydra hydra-dired (:hint nil :color pink)
@@ -263,6 +265,30 @@ _<_ beginning of buffer _>_ end of buffer
   ("," beginning-of-line)
   ("q" nil "quit" :color blue))
 
+(defhydra hydra-lsp (:exit t :hint nil)
+  "
+ Buffer^^               Server^^                   Symbol
+-------------------------------------------------------------------------------------
+ [_f_] format           [_M-r_] restart            [_d_] declaration  [_i_] implementation  [_o_] documentation
+ [_m_] imenu            [_S_]   shutdown           [_D_] definition   [_t_] type            [_r_] rename
+ [_x_] execute action   [_M-s_] describe session   [_R_] references   [_s_] signature"
+  ("d" lsp-find-declaration)
+  ("D" lsp-ui-peek-find-definitions)
+  ("R" lsp-ui-peek-find-references)
+  ("i" lsp-ui-peek-find-implementation)
+  ("t" lsp-find-type-definition)
+  ("s" lsp-signature-help)
+  ("o" lsp-describe-thing-at-point)
+  ("r" lsp-rename)
+
+  ("f" lsp-format-buffer)
+  ("m" lsp-ui-imenu)
+  ("x" lsp-execute-code-action)
+
+  ("M-s" lsp-describe-session)
+  ("M-r" lsp-restart-workspace)
+  ("S" lsp-shutdown-workspace))
+
 ;;; Functions
 
 (defun ivy--matcher-desc ()
@@ -295,7 +321,7 @@ _<_ beginning of buffer _>_ end of buffer
  "s-w z"  'delete-other-windows
  "s-w t"  'exwm-floating-toggle-floating
 
- "s-SPC" 'helm-M-x
+ "s-x" 'helm-M-x
 
  "s-b"   '(:ignore t :which-key "buffer")
  "s-b b" 'helm-mini
@@ -331,13 +357,13 @@ _<_ beginning of buffer _>_ end of buffer
  "s-s p" 'helm-swoop
  "s-s i" 'swiper-isearch
  "s-s a" 'helm-multi-swoop
- "s-s r" 'helm-rg
  "s-s a" 'swiper-all
- "s-s r" 'counsel-rg
+ "s-s r" 'helm-ag
  "s-s g" 'counsel-grep-or-swiper
  "s-s t" 'my/counsel-rg-thing-at-point
  "s-s w" 'avy-goto-word-or-subword-1
  "s-s c" 'avy-goto-char
+ "s-s l" 'avy-goto-char-in-line
 
  "s-g"   '(:ignore t :which-key "git")
  "s-g s" 'magit-status
@@ -369,8 +395,9 @@ _<_ beginning of buffer _>_ end of buffer
  "s-h c" '(hydra-flycheck/body :which-key "flycheck")
  "s-h m" '(hydra-multiple-cursors/body :which-key "multiple-cursors")
  "s-h n" '(hydra-navigate/body :which-key "navigate")
- "s-h r" '(hydra-rectangle/body)
+ "s-h r" '(hydra-rectangle/body :which-key "rectangle")
  "s-h z" '(hydra-zoom/body :which-key "zoom")
+ "s-h l" '(hydra-lsp/body :which-key "lsp")
 
  "s-v"   '(:ignore t :which "view")
  "s-v p" 'ivy-push-view
@@ -379,13 +406,29 @@ _<_ beginning of buffer _>_ end of buffer
  "s-v l" 'my/load-ivy-views
  "s-v v" 'ivy-switch-view
 
- "s-x"   '(:ignore t :which "minibuffer")
- "s-x h" 'helm-minibuffer-history
+ "s-m"   '(:ignore t :which "minibuffer")
+ "s-m h" 'helm-minibuffer-history
 
  "s-<tab>" 'company-complete
 
  "s-o"   '(:ignore t :which "org")
  "s-o m" 'org-mu4e-store-and-capture)
+
+(global-set-key [remap apropos] #'helm-apropos)
+(global-set-key [remap find-library] #'helm-locate-library)
+(global-set-key [remap bookmark-jump]  #'helm-bookmarks)
+(global-set-key [remap execute-extended-command]  #'helm-M-x)
+(global-set-key [remap find-file] #'helm-find-files)
+(global-set-key [remap locate] #'helm-locate)
+(global-set-key [remap imenu] #'helm-semantic-or-imenu)
+(global-set-key [remap noop-show-kill-ring] #'helm-show-kill-ring)
+(global-set-key [remap switch-to-buffer] #'helm-buffers-list)
+(global-set-key [remap projectile-find-file] #'helm-projectile-find-file)
+(global-set-key [remap projectile-recentf] #'helm-projectile-recentf)
+(global-set-key [remap projectile-switch-project] #'helm-projectile-switch-project)
+(global-set-key [remap projectile-switch-to-buffer] #'helm-projectile-switch-to-buffer)
+(global-set-key [remap recentf-open-files] #'helm-recentf)
+(global-set-key [remap yank-pop] #'helm-show-kill-ring)
 
 ;; Get prefixes to work in X applications
 (when (equal window-system 'x)
@@ -415,63 +458,6 @@ _<_ beginning of buffer _>_ end of buffer
  :keymaps 'mu4e-headers-mode-map
  "."   'hydra-mu4e-headers/body
  "o"   'my/org-capture-mu4e) ;; TODO: write this function
-
-
-
-(defhydra hydra-smartparens (:hint nil)
-     "
-  Moving^^^^                       Slurp & Barf^^   Wrapping^^            Sexp juggling^^^^               Destructive
- ------------------------------------------------------------------------------------------------------------------------
-  [_a_] beginning  [_n_] down      [_h_] bw slurp   [_R_] rewrap        [_S_] split   [_t_] transpose   [_c_] change inner  [_w_] copy
-  [_e_] end        [_N_] bw down   [_H_] bw barf    [_u_] unwrap        [_s_] splice  [_A_] absorb      [_C_] change outer  [_M-k_] kill inside
-  [_f_] forward    [_p_] up        [_l_] slurp      [_U_] bw unwrap     [_r_] raise   [_E_] emit        [_k_] kill          [_g_] quit
-  [_b_] backward   [_P_] bw up     [_L_] barf       [_(__{__[__'__\"_] wrap      [_j_] join    [_o_] convolute   [_K_] bw kill       [_q_] quit"
-     ;; Moving
-     ("a" sp-beginning-of-sexp)
-     ("e" sp-end-of-sexp)
-     ("f" sp-forward-sexp)
-     ("b" sp-backward-sexp)
-     ("n" sp-down-sexp)
-     ("N" sp-backward-down-sexp)
-     ("p" sp-up-sexp)
-     ("P" sp-backward-up-sexp)
-
-     ;; Slurping & barfing
-     ("h" sp-backward-slurp-sexp)
-     ("H" sp-backward-barf-sexp)
-     ("l" sp-forward-slurp-sexp)
-     ("L" sp-forward-barf-sexp)
-
-     ;; Wrapping
-     ("R" sp-rewrap-sexp)
-     ("u" sp-unwrap-sexp)
-     ("U" sp-backward-unwrap-sexp)
-     ("(" sp-wrap-round)
-     ("{" sp-wrap-curly)
-     ("[" sp-wrap-square)
-     ("'" my/sp-wrap-single-quote)
-     ("\"" my/sp-wrap-double-quote)
-
-     ;; Sexp juggling
-     ("S" sp-split-sexp)
-     ("s" sp-splice-sexp)
-     ("r" sp-raise-sexp)
-     ("j" sp-join-sexp)
-     ("t" sp-transpose-sexp)
-     ("A" sp-absorb-sexp)
-     ("E" sp-emit-sexp)
-     ("o" sp-convolute-sexp)
-
-     ;; Destructive editing
-     ("c" sp-change-inner :exit t)
-     ("C" sp-change-enclosing :exit t)
-     ("k" sp-kill-sexp)
-     ("K" sp-backward-kill-sexp)
-     ("M-k" my/sp-kill-inside-sexp)
-     ("w" sp-copy-sexp)
-
-     ("q" nil)
-     ("g" nil))
 
 (use-package dumb-jump
   :general

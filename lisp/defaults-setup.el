@@ -6,6 +6,14 @@
 
 ;;; Code:
 
+;; (require 'epa)
+;;   (epa-file-enable)
+;;   (setq epg-gpg-program "gpg")
+
+;;   (load-if-exists "~/.emacs.d/secrets.el.gpg")
+;;   (load-if-exists "~/.emacs.d/secrets.el")
+
+
 (when (equal system-type 'gnu/linux)
   (defun my/start-daemons ()
   "Start some daemons.  Hooks into `after-init-hook'."

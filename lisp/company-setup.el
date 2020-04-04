@@ -16,7 +16,7 @@
     (setq company-tooltip-align-annotations t
           company-tooltip-limit 15
           company-show-numbers t
-          company-idle-delay 3
+          company-idle-delay nil
           company-minimum-prefix-length 3)
     (setq company-dabbrev-downcase nil))
   :diminish company-mode)

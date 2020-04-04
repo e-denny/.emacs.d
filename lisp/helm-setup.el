@@ -47,6 +47,14 @@
     (setq helm-recentf-fuzzy-match t)
     (setq helm-semantic-fuzzy-match t)
     (setq helm-buffers-fuzzy-matching t)
+
+    (setq helm-grep-ag-command (concat "rg"
+                                   " --color=always"
+                                   " --smart-case"
+                                   " --no-heading"
+                                   " --line-number %s %s %s")
+      helm-grep-file-path-style 'relative)
+
     ;; hide helm sources lines
     (set-face-attribute 'helm-source-header nil :height 0.1)
     (helm-autoresize-mode 1)

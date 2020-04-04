@@ -15,6 +15,7 @@
   (package-install 'use-package))
 
 (eval-when-compile
+  (defvar use-package-enable-imenu-support)
   (require 'use-package))
 
 (customize-set-variable 'use-package-compute-statistics t)

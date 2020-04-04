@@ -9,11 +9,13 @@
 (use-package which-key
   :ensure t
   :diminish which-key-mode
+  ;; :custom
+  ;; (which-key-setup-side-window-bottom)
   :config
-  (which-key-setup-side-window-bottom)
   (setq which-key-max-display-columns nil
         which-key-min-display-lines 5
         which-key-sort-order #'which-key-prefix-then-key-order
+        which-key-popup-type 'side-window
         which-key-add-column-padding 1)
   (which-key-mode +1))
 

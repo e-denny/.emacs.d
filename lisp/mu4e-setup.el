@@ -28,8 +28,9 @@
     (setq mu4e-maildir (expand-file-name "~/.mail")
           mu4e-attachment-dir "~/Downloads"
           mu4e-compose-signature-auto-include nil
-          ;; mu4e-drafts-folder "/Drafts"
-          ;; mu4e-trash-folder "/Trash"
+
+          mu4e-trash-folder "/home/[Gmail]/Trash"
+          mu4e-refile-folder "/home/[Gmail]/Archive"
           ;; mu4e-sent-folder "/SentMail"
 
           mu4e-get-mail-command "mbsync -c ~/.mbsyncrc home-inbox"
@@ -48,22 +49,13 @@
           mu4e-headers-skip-duplicates t
           mu4e-compose-signature-auto-include nil
           mu4e-sent-messages-behavior 'delete)
-    (setq mu4e-use-fancy-chars t
-          mu4e-headers-draft-mark '("D" . "⚒ ") ; draft
-          mu4e-headers-seen-mark '("S" . "☑ ") ; seen
-          mu4e-headers-unseen-mark '("u" . "☐ ") ; unseen
-          mu4e-headers-flagged-mark '("F" . "⚵ ") ; flagged
-          mu4e-headers-new-mark '("N" . "✉ ") ; new
-          mu4e-headers-replied-mark '("R" . "↵ ") ; replied
-          mu4e-headers-passed-mark '("P" . "⇉ ") ; passed
-          mu4e-headers-encrypted-mark '("x" . "⚷ ") ; encrypted
-          mu4e-headers-signed-mark '("s" . "✍ ") ; signed
-          ;; thread prefix marks
-          mu4e-headers-has-child-prefix '("+" . "◼")
-          mu4e-headers-empty-parent-prefix '("-" . "◽")
-          mu4e-headers-first-child-prefix '("\\" . "┗▶")
-          mu4e-headers-duplicate-prefix '("=" . "⚌")
-          mu4e-headers-default-prefix '("|" . "┃"))
+
+    ;; Use 'helm' to select mailboxes
+    (setq mu4e-completing-read-function 'completing-read)
+
+    ;; Don't ask to quit
+    (setq mu4e-confirm-quit nil)
+
     (when (fboundp 'imagemagick-register-types)
       (imagemagick-register-types))
     (setq mu4e-headers-fields

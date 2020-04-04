@@ -56,6 +56,49 @@
     ;;make paren highlight update after stuff like paredit changes
     (add-to-list 'after-change-functions '(lambda (&rest x) (hl-paren-highlight)))))
 
+
+;; (use-package elisp-mode
+;;   :straight nil
+;;   :bind (:map emacs-lisp-mode-map
+;;               ("C-c C-x" . ielm)
+;;               ("C-c C-c" . eval-defun)
+;;               ("C-c C-k" . eval-buffer)))
+
+;; (use-package smartparens
+;;   :bind (:map smartparens-mode-map
+;;               ("C-M-f" . sp-forward-sexp)
+;;               ("C-M-b" . sp-backward-sexp)
+;;               ("C-M-u" . sp-backward-up-sexp)
+;;               ("C-M-d" . sp-down-sexp)
+;;               ("C-M-p" . sp-backward-down-sexp)
+;;               ("C-M-n" . sp-up-sexp)
+;;               ("C-M-s" . sp-splice-sexp)
+;;               ("C-M-<up>" . sp-splice-sexp-killing-backward)
+;;               ("C-M-<down>" . sp-splice-sexp-killing-forward)
+;;               ("C-M-r" . sp-splice-sexp-killing-around)
+;;               ("C-)" . sp-forward-slurp-sexp)
+;;               ("C-<right>" . sp-forward-slurp-sexp)
+;;               ("C-}" . sp-forward-barf-sexp)
+;;               ("C-<left>" . sp-forward-barf-sexp)
+;;               ("C-(" . sp-backward-slurp-sexp)
+;;               ("C-M-<left>" . sp-backward-slurp-sexp)
+;;               ("C-{" . sp-backward-barf-sexp)
+;;               ("C-M-<right>" . sp-backward-barf-sexp)
+;;               ("M-S" . sp-split-sexp))
+;;   :init
+;;   (smartparens-global-strict-mode +1)
+;;   :config
+;;   (require 'smartparens-config)
+;;   ;; Org-mode config
+;;   (sp-with-modes 'org-mode
+;;     (sp-local-pair "'" nil :unless '(sp-point-after-word-p))
+;;     (sp-local-pair "*" "*" :actions '(insert wrap) :unless '(sp-point-after-word-p sp-point-at-bol-p) :wrap "C-*" :skip-match 'sp--org-skip-asterisk)
+;;     (sp-local-pair "_" "_" :unless '(sp-point-after-word-p))
+;;     (sp-local-pair "/" "/" :unless '(sp-point-after-word-p) :post-handlers '(("[d1]" "SPC")))
+;;     (sp-local-pair "~" "~" :unless '(sp-point-after-word-p) :post-handlers '(("[d1]" "SPC")))
+;;     (sp-local-pair "=" "=" :unless '(sp-point-after-word-p) :post-handlers '(("[d1]" "SPC")))
+;;     (sp-local-pair "«" "»")))
+
 ;; (use-package highlight-indent-guides
 ;;   :diminish highlight-indent-guides-mode
 ;;   :config

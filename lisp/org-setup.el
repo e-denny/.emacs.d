@@ -22,7 +22,7 @@
     (setq org-directory
           (cond ((equal system-type 'windows-nt) "c:/Users/edenny/Org")
                 ((equal system-type 'gnu/linux) "/home/edgar/Notes")))
-    (setq org-agenda-files (directory-files-recursively (concat org-directory "/") "\.org$"))
+    (setq org-agenda-files (directory-files-recursively (concat org-directory "/Agenda/") "\.org$"))
     (setq org-log-done 'time)
     (setq org-agenda-show-all-dates nil)
     (setq org-capture-templates
@@ -43,6 +43,11 @@
              "* %i%? \n %^t")))
 
     (setq org-return-follows-link t)
+
+;;    (org-catch-invisible-edits 'show)
+
+;;    (variable-pitch ((t (:family "Libre Baskerville"))))
+
     (setq org-outline-path-complete-in-steps nil)
     (setq org-refile-allow-creating-parent-nodes 'confirm)
     (setq org-src-fontify-natively t
@@ -117,6 +122,25 @@
     (org-clock-persistence-insinuate)
     (setq org-outline-path-complete-in-steps 't)
     (setq org-time-clocksum-format '(:hours "%d" :require-hours t :minutes ":%02d" :require-minutes t))
+
+
+    ;; (defun jethro/style-org ()
+    ;;   (setq line-spacing 0.2)
+    ;;   (variable-pitch-mode +1)
+    ;;   (mapc
+    ;;    (lambda (face) ;; Other fonts with fixed-pitch.
+    ;;      (set-face-attribute face nil :inherit 'fixed-pitch))
+    ;;    (list 'org-code
+    ;;          'org-link
+    ;;          'org-block
+    ;;          'org-table
+    ;;          'org-verbatim
+    ;;          'org-block-begin-line
+    ;;          'org-block-end-line
+    ;;          'org-meta-line
+    ;;          'org-document-info-keyword)))
+
+    ;; (add-hook 'org-mode-hook #'jethro/style-org)
 
     (org-link-set-parameters
      "search-view" :follow 'my-search-view-link)
@@ -208,6 +232,49 @@
                     (quote scheduled)))))))
          nil nil)))
 
+;; (use-package org-cliplink
+;;   :bind
+;;   ("C-c C" . 'jethro/org-capture-link)
+;;   :config
+;;   (defun jethro/org-capture-link ()
+;;     "Captures a link, and stores it in inbox."
+;;     (interactive)
+;;     (org-capture nil "l")))
+
+;; (use-package org-download
+;;   :after org
+;;   :bind
+;;   (:map org-mode-map
+;;         (("s-Y" . org-download-screenshot)
+;;          ("s-y" . org-download-yank)))
+;;   :config
+;;   (if (memq window-system '(mac ns))
+;;       (setq org-download-screenshot-method "screencapture -i %s")
+;;     (setq org-download-screenshot-method "maim -s %s"))
+;;   (defun my-org-download-method (link)
+;;     "This is a helper function for org-download.
+;; It creates a folder in the root directory (~/.org/img/) named after the
+;; org filename (sans extension) and puts all images from that file in there.
+;; Inspired by https://github.com/daviderestivo/emacs-config/blob/6086a7013020e19c0bc532770e9533b4fc549438/init.el#L701"
+;;     (let ((filename
+;;            (file-name-nondirectory
+;;             (car (url-path-and-query
+;;                   (url-generic-parse-url link)))))
+;;           ;; Create folder name with current buffer name, and place in root dir
+;;           (dirname (concat "./images/"
+;;                            (replace-regexp-in-string " " "_" (downcase (file-name-base buffer-file-name))))))
+
+;;       ;; Add timestamp to filename
+;;       (setq filename-with-timestamp (format "%s%s.%s"
+;;                                             (file-name-sans-extension filename)
+;;                                             (format-time-string org-download-timestamp)
+;;                                             (file-name-extension filename)))
+;;       ;; Create folder if necessary
+;;       (unless (file-exists-p dirname)
+;;         (make-directory dirname))
+;;       (expand-file-name filename-with-timestamp dirname)))
+;;   (setq org-download-method 'my-org-download-method))
+
 (use-package org-sidebar
   :after org
   :commands (org-sidebar-tree-toggle org-sidebar-toggle org-sidebar-ql)
@@ -237,8 +304,7 @@
    )
   :straight (:host github :repo "jethrokuan/org-roam" :branch "develop")
   :custom
-  (org-roam-directory (cond ((equal system-type 'windows-nt) "c:/Users/edenny/Roam")
-                            ((equal system-type 'gnu/linux) "/home/edgar/Roam")))
+  (org-roam-directory (concat org-directory "/Roam"))
   :bind
   ("C-c n l" . org-roam)
   ("C-c n t" . org-roam-today)
@@ -247,7 +313,10 @@
   ("C-c n g" . org-roam-show-graph)
   :config
   (setq org-roam-buffer-width 0.4)
-  (setq org-roam-link-title-format "{{%s}}"))
+  (setq org-roam-link-title-format "{{%s}}")
+  (setq org-roam-templates
+        '(("default" (:file org-roam--file-name-timestamp-title
+                            :content "#+TITLE: ${title} \n")))))
 
 (provide 'org-setup)
 
