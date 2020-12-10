@@ -50,7 +50,6 @@
 (setq custom-file (make-temp-file ""))
 (setq custom-safe-themes t)
 (load custom-file)
-;; TODO: should I delete it on exit with a hook?
 
 ;; install use-package with straight
 (straight-use-package 'use-package)
@@ -59,6 +58,8 @@
   :straight t)
 
 (diminish 'visual-line-mode "")
+(diminish 'undo-tree-mode "")
+(diminish 'auto-revert-mode "")
 (diminish 'isearch-mode "?")
 
 ;; ----------------------------------------------------------------------
@@ -101,6 +102,9 @@
 ;; show line numbers for program buffers
 (add-hook 'prog-mode-hook 'display-line-numbers-mode)
 
+;; start flymake mode
+(add-hook 'prog-mode-hook 'flymake-mode)
+
 (set-language-environment 'utf-8)
 (prefer-coding-system 'utf-8)
 (set-terminal-coding-system 'utf-8)
@@ -127,17 +131,18 @@
 
 ;; smooth scrolling
 (setq
-  scroll-margin 2
-  scroll-conservatively 10000
+  scroll-margin 3
+  scroll-conservatively 1
+  scroll-preserve-screen-position t
   scroll-conservatively scroll-margin
   scroll-step 1
   mouse-wheel-scroll-amount '(6 ((shift) . 1))
   mouse-wheel-progressive-speed nil
-  scroll-preserve-screen-position t
   scroll-error-top-bottom t
   next-error-recenter (quote (4))
-  fast-but-imprecise-scrolling nil
-  jit-lock-defer-time 0)
+;;  fast-but-imprecise-scrolling nil
+;;  jit-lock-defer-time 0
+  )
 
 ; don't load old bype code
 (setq load-prefer-newer t)
@@ -152,8 +157,9 @@
 
 (add-hook 'prog-mode-hook
                (lambda ()
-                (font-lock-add-keywords nil
-                                        '(("\\<\\(FIXME\\|TODO\\|BUG\\):" 1 font-lock-warning-face t)))))
+                 (font-lock-add-keywords
+                  nil
+                  '(("\\<\\(FIXME\\|TODO\\|BUG\\):" 1 font-lock-warning-face t)))))
 
 (defun my-beginning-of-line-dwim ()
   "Move point to first non-whitespace character, or beginning of line."
@@ -164,6 +170,12 @@
          (back-to-indentation))))
 ;; smarter C-a
 (global-set-key [remap move-beginning-of-line] #'my-beginning-of-line-dwim)
+
+;; auto revert mode
+(global-auto-revert-mode 1)
+
+;; auto refresh dired when file changes
+(add-hook 'dired-mode-hook 'auto-revert-mode)
 
 ;; ----------------------------------------------------------------------
 ;; avy
@@ -194,16 +206,16 @@
 (use-package company
   :straight t
   :defer t
-  :init (global-company-mode)
+  ;; :init (global-company-mode)
+  :hook (prog-mode . company-mode)
   :config
-  (progn
-    (bind-key [remap completion-at-point] #'company-complete company-mode-map)
-    (setq company-tooltip-align-annotations t
-          company-tooltip-limit 15
-          company-show-numbers t
-          company-idle-delay nil
-          company-minimum-prefix-length 3)
-    (setq company-dabbrev-downcase nil))
+  (setq company-tooltip-align-annotations t
+        company-tooltip-limit 15
+        company-show-numbers nil
+        company-idle-delay 0.2
+        company-minimum-prefix-length 2)
+  (setq company-dabbrev-downcase nil)
+  ;; (bind-key [remap completion-at-point] #'company-complete company-mode-map)
   :diminish company-mode)
 
 ;; company with icons
@@ -220,7 +232,6 @@
   :commands (dired dired-jump dired-jump-other-window)
   :config
   (setq dired-listing-switches "-laGh1v --group-directories-first")
-  (setq dired-clean-confirm-killing-deleted-buffers t)
   (setq dired-recursive-copies 'always)
   (setq dired-recursive-deletes 'always)
 
@@ -235,19 +246,6 @@
       (when (and (file-directory-p filename)
                  (not (eq (current-buffer) orig)))
         (kill-buffer orig)))))
-
-;; FIXME: this does not seem to work
-(defun dired-dotfiles-toggle ()
-  "Show/hide dot-files."
-  (when (equal major-mode 'dired-mode)
-    (if (or (not (boundp 'dired-dotfiles-show-p)) dired-dotfiles-show-p) ; if currently showing
-        (progn
-          (set (make-local-variable 'dired-dotfiles-show-p) nil)
-          (message "h")
-          (dired-mark-files-regexp "^\\\.")
-          (dired-do-kill-lines))
-      (progn (revert-buffer) ; otherwise just revert to re-show
-             (set (make-local-variable 'dired-dotfiles-show-p) t)))))
 
 (use-package dired-subtree
   :straight t
@@ -350,48 +348,6 @@
     ;;make paren highlight update after stuff like paredit changes
     (add-to-list 'after-change-functions '(lambda (&rest x) (hl-paren-highlight)))))
 
-
-;; (use-package elisp-mode
-;;   :bind (:map emacs-lisp-mode-map
-;;               ("C-c C-x" . ielm)
-;;               ("C-c C-c" . eval-defun)
-;;               ("C-c C-k" . eval-buffer)))
-
-;; (use-package smartparens
-;;   :bind (:map smartparens-mode-map
-;;               ("C-M-f" . sp-forward-sexp)
-;;               ("C-M-b" . sp-backward-sexp)
-;;               ("C-M-u" . sp-backward-up-sexp)
-;;               ("C-M-d" . sp-down-sexp)
-;;               ("C-M-p" . sp-backward-down-sexp)
-;;               ("C-M-n" . sp-up-sexp)
-;;               ("C-M-s" . sp-splice-sexp)
-;;               ("C-M-<up>" . sp-splice-sexp-killing-backward)
-;;               ("C-M-<down>" . sp-splice-sexp-killing-forward)
-;;               ("C-M-r" . sp-splice-sexp-killing-around)
-;;               ("C-)" . sp-forward-slurp-sexp)
-;;               ("C-<right>" . sp-forward-slurp-sexp)
-;;               ("C-}" . sp-forward-barf-sexp)
-;;               ("C-<left>" . sp-forward-barf-sexp)
-;;               ("C-(" . sp-backward-slurp-sexp)
-;;               ("C-M-<left>" . sp-backward-slurp-sexp)
-;;               ("C-{" . sp-backward-barf-sexp)
-;;               ("C-M-<right>" . sp-backward-barf-sexp)
-;;               ("M-S" . sp-split-sexp))
-;;   :init
-;;   (smartparens-global-strict-mode +1)
-;;   :config
-;;   (require 'smartparens-config)
-;;   ;; Org-mode config
-;;   (sp-with-modes 'org-mode
-;;     (sp-local-pair "'" nil :unless '(sp-point-after-word-p))
-;;     (sp-local-pair "*" "*" :actions '(insert wrap) :unless '(sp-point-after-word-p sp-point-at-bol-p) :wrap "C-*" :skip-match 'sp--org-skip-asterisk)
-;;     (sp-local-pair "_" "_" :unless '(sp-point-after-word-p))
-;;     (sp-local-pair "/" "/" :unless '(sp-point-after-word-p) :post-handlers '(("[d1]" "SPC")))
-;;     (sp-local-pair "~" "~" :unless '(sp-point-after-word-p) :post-handlers '(("[d1]" "SPC")))
-;;     (sp-local-pair "=" "=" :unless '(sp-point-after-word-p) :post-handlers '(("[d1]" "SPC")))
-;;     (sp-local-pair "«" "»")))
-
 ;; (use-package highlight-indent-guides
 ;;   :diminish highlight-indent-guides-mode
 ;;   :config
@@ -423,15 +379,6 @@
               (add-to-list 'eshell-visual-commands "ssh")
               (add-to-list 'eshell-visual-commands "tail")
               (add-to-list 'eshell-visual-commands "htop"))))
-
-
-;; TODO: add fish completion to eshell
-
-(use-package eshell-git-prompt
-  :straight t
-  :after eshell
-  :config
-  (eshell-git-prompt-use-theme 'powerline))
 
 ;; ----------------------------------------------------------------------
 ;; exwm
@@ -527,6 +474,7 @@
 
 (use-package flycheck
   :straight t
+  :disabled t
   :diminish " ✓"
   :commands global-flycheck-mode
   :init (add-hook 'prog-mode-hook 'global-flycheck-mode)
@@ -582,6 +530,41 @@
   :straight t
   :after evil)
 
+;;; esc quits
+(defun minibuffer-keyboard-quit ()
+  "Abort recursive edit.
+In Delete Selection mode, if the mark is active, just deactivate it;
+then it takes a second \\[keyboard-quit] to abort the minibuffer."
+  (interactive)
+  (if (and delete-selection-mode transient-mark-mode mark-active)
+      (setq deactivate-mark  t)
+    (when (get-buffer "*Completions*") (delete-windows-on "*Completions*"))
+    (abort-recursive-edit)))
+
+(define-key evil-normal-state-map [escape] 'keyboard-quit)
+(define-key evil-visual-state-map [escape] 'keyboard-quit)
+(define-key minibuffer-local-map [escape] 'minibuffer-keyboard-quit)
+(define-key minibuffer-local-ns-map [escape] 'minibuffer-keyboard-quit)
+(define-key minibuffer-local-completion-map [escape] 'minibuffer-keyboard-quit)
+(define-key minibuffer-local-must-match-map [escape] 'minibuffer-keyboard-quit)
+(define-key minibuffer-local-isearch-map [escape] 'minibuffer-keyboard-quit)
+
+;; (defun exit-insert-save ()
+;;   (if (buffer-file-name)
+;;     (evil-save (buffer-file-name))))
+
+;; (add-hook 'evil-insert-state-exit-hook 'exit-insert-save)
+
+(define-key evil-normal-state-map (kbd "DEL") (lambda ()
+                                               (interactive)
+                                               (previous-line 10)
+                                               (evil-scroll-line-up 10)))
+
+(define-key evil-normal-state-map (kbd "=") (lambda ()
+                                              (interactive)
+                                              (next-line 10)
+                                              (evil-scroll-line-down 10)))
+
 ;; ----------------------------------------------------------------------
 ;; helm
 ;; ----------------------------------------------------------------------
@@ -632,10 +615,10 @@
     (setq helm-buffers-fuzzy-matching t)
 
     (setq helm-grep-ag-command (concat "rg"
-                                   " --color=always"
-                                   " --smart-case"
-                                   " --no-heading"
-                                   " --line-number %s %s %s")
+                                       ;; " --color=always"
+                                       " --smart-case"
+                                       " --no-heading"
+                                       " --line-number %s %s %s")
       helm-grep-file-path-style 'relative)
 
     ;; hide helm sources lines
@@ -702,6 +685,25 @@
     (apply (cdr (assoc browser my-browsers)) args)))
 
 (setq browse-url-browser-function #'my-browse-url)
+
+;; ----------------------------------------------------------------------
+;; shrface expand
+;; ----------------------------------------------------------------------
+
+(use-package shrface
+  :straight t
+  :defer t
+  :config
+  (shrface-basic)
+  (shrface-trial)
+  (setq shrface-href-versatile t))
+
+(use-package eww
+  :defer t
+  :init
+  (add-hook 'eww-after-render-hook #'shrface-mode)
+  :config
+  (require 'shrface))
 
 ;; ----------------------------------------------------------------------
 ;; hippie expand
@@ -785,39 +787,41 @@
 ;; eglot
 ;; ----------------------------------------------------------------------
 
+(use-package ccls
+  :straight t
+  :hook ((c-mode c++-mode objc-mode cuda-mode) .
+         (lambda () (require 'ccls))))
+
 (use-package eglot
   :straight t
-  :disabled t
   :bind (:map eglot-mode-map
               ("C-c C-d" . eglot-help-at-point)
               ("M-." . xref-find-definitions)
               ("C-c C-r" . eglot-code-actions))
   :config
-  (add-to-list 'eglot-server-programs '((c-mode c++-mode) "clangd"))
+  (add-to-list 'eglot-server-programs '((c-mode c++-mode) "ccls"))
   (add-hook 'c-mode-hook #'eglot-ensure)
   (add-hook 'python-mode #'eglot-ensure)
   (add-hook 'c++-mode-hook #'eglot-ensure))
+
 ;; ----------------------------------------------------------------------
 ;; lsp
 ;; ----------------------------------------------------------------------
 
-(use-package ccls
-  :straight t
-  :hook ((c-mode c++-mode objc-mode cuda-mode) .
-         (lambda () (require 'ccls) (lsp))))
-
 (use-package lsp-mode
   :straight t
+  :disabled t
 ;;  :commands lsp
   :config
   (setq lsp-auto-guess-root t
         lsp-file-watch-threshold 500
         lsp-auto-configure nil
-        lsp-prefer-flymake nil)
+        lsp-prefer-flymake t)
   :hook ((c-mode c++-mode java-mode python-mode) . lsp))
 
 (use-package lsp-ui
   :straight t
+  :disabled t
   :after lsp-mode
 ;;  :commands lsp-ui-mode
   :config
@@ -826,18 +830,9 @@
   (setq lsp-ui-doc-delay -1)
   (add-hook 'lsp-mode-hook 'lsp-ui-mode))
 
-(use-package company-lsp
-  :straight t
-;;  :commands company-lsp
-  :after company lsp-mode
-  :config
-  (push 'company-lsp company-backends)
-  (setq company-lsp-async t
-        company-lsp-cache-candidates 'auto
-        company-lsp-enable-recompletion t))
-
 (use-package dap-mode
   :straight t
+  :disabled t
   :after lsp-mode
   :config
   (dap-mode t)
@@ -1021,7 +1016,6 @@
   :straight t
   :commands (flyspell-auto-correct-previous-word flyspell-correct-word-generic)
   :init
-  ;; Below variables need to be set before `flyspell' is loaded.
   (setq flyspell-use-meta-tab nil)
   :custom
   (flyspell-abbrev-p t)
@@ -1060,23 +1054,37 @@
 
 (use-package doom-themes
   :straight t
+  :disabled t
   :config
   ;; Global settings (defaults)
-  (setq doom-themes-enable-bold t    ; if nil, bold is universally disabled
-        doom-themes-enable-italic t) ; if nil, italics is universally disabled
+  (setq doom-themes-enable-bold t
+        doom-themes-enable-italic t)
   (load-theme 'doom-one t)
-
-  ;; Enable flashing mode-line on errors
   (doom-themes-visual-bell-config)
-
-  ;; Enable custom neotree theme (all-the-icons must be installed!)
-  ;; (doom-themes-neotree-config)
-  ;; or for treemacs users
-  (setq doom-themes-treemacs-theme "doom-colors") ; use the colorful treemacs theme
+  (setq doom-themes-treemacs-theme "doom-colors")
   (doom-themes-treemacs-config)
-
-  ;; Corrects (and improves) org-mode's native fontification.
   (doom-themes-org-config))
+
+(use-package modus-operandi-theme
+  :straight t
+  :config
+  (setq modus-operandi-theme-bold-constructs t)
+  (setq modus-operandi-theme-fringes nil)
+  (setq modus-operandi-theme-syntax 'alt-syntax-yellow-comments)
+  (setq modus-operandi-theme-prompts 'subtle)
+  (setq modus-operandi-theme-completions 'moderate)
+  (setq modus-operandi-theme-org-blocks 'grayscale)
+  (load-theme 'modus-operandi t))
+
+;; (use-package modus-vivendi-theme
+;;   :straight t
+;;   :config
+;;   (load-theme 'modus-vivendi t)
+;;   (setq modus-vivendi-theme-bold-constructs t)
+;;   (setq modus-vivendi-theme-fringes nil)
+;;   (setq modus-vivendi-theme-syntax 'yellow-comments-green-strings)
+;;   (setq modus-vivendi-theme-prompts 'intense)
+;;   (setq modus-vivendi-theme-org-blocks 'grayscale))
 
 ;; ----------------------------------------------------------------------
 ;; treemacs
@@ -1416,13 +1424,30 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   ;; :prefix my-local-leader
   :prefix "SPC m")
 
+(defun scroll-half-page-down ()
+  "scroll down half the page"
+  (interactive)
+  (scroll-down (/ (window-body-height) 2)))
+
+(defun scroll-half-page-up ()
+  "scroll up half the page"
+  (interactive)
+  (scroll-up (/ (window-body-height) 2)))
+
+(my-leader-def
+  :states 'visual
+  "e /" 'paredit-comment-dwim
+  )
+
 (my-leader-def
   :states 'normal
+  ;; make leader key work everywhere
+  :keymaps 'override
   "w"    '(:ignore t :which-key "window")
   "w l"  'windmove-right
-  "w j"  'windmove-left
-  "w i"  'windmove-up
-  "w k"  'windmove-down
+  "w h"  'windmove-left
+  "w k"  'windmove-up
+  "w j"  'windmove-down
   "w v"  'split-window-right
   "w h"  'split-window-below
   "w +"  'enlarge-window
@@ -1431,6 +1456,7 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   "w ="  'balance-windows
   "w d"  'delete-window
   "w z"  'delete-other-windows
+  "w o"  'other-window
   "w t"  'exwm-floating-toggle-floating
   "w u"  'winner-undo
   "w r"  'winner-redo
@@ -1439,6 +1465,7 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   "w c" 'eyebrowse-create-window-config
 
   "x" 'helm-M-x
+  "d d" 'dired
 
   "b"   '(:ignore t :which-key "buffer")
   "b b" 'helm-mini
@@ -1462,33 +1489,36 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
 
   ;; TODO: put within LSP mode map
   "c l"     '(:ignore t :which-key "lsp")
-  "c l d"   'lsp-find-declaration
-  "c l D"   'lsp-ui-peek-find-definitions
-  "c l R"   'lsp-ui-peek-find-references
-  "c l i"   'lsp-ui-peek-find-implementation
-  "c l t"   'lsp-find-type-definition
-  "c l s"   'lsp-signature-help
-  "c l o"   'lsp-describe-thing-at-point
-  "c l r"   'lsp-rename
-  "c l f"   'lsp-format-buffer
-  "c l m"   'lsp-ui-imenu
-  "c l x"   'lsp-execute-code-action
-  "c l M-s" 'lsp-describe-session
-  "c l M-r" 'lsp-workspace-restart
-  "c l S"   'lsp-workspace-shutdown
+  "c l d"   'eglot-find-declaration
+  "c l D"   'xref-find-definitions
+  "c l R"   'xref-find-references
+  "c l i"   'eglot-find-implementation
+  "c l t"   'eglot-find-typeDefinition
+  "c l s"   'display-local-help
+  "c l r"   'eglot-rename
+  "c l h"   'eglot-help-at-point
+  "c l f"   'eglot-format
+  "c l x"   'eglot-code-actions
+  "c l M-r" 'eglot-restart
+  "c l S"   'eglot-shutdown
 
   "k d" 'general-describe-keybindings
 
-  "e"   '(:ignore t :which-key "eval")
+  "e"   '(:ignore t :which-key "elisp")
   "e l" 'eval-last-sexp
   "e f" 'eval-defun
   "e r" 'eval-region
   "e b" 'eval-buffer
+  "e >" 'paredit-forward-slurp-sexp
+  "e <" 'paredit-forward-barf-sexp
+  "e /" 'paredit-comment-dwim
+  "e (" 'paredit-reindent-defun
   "e i" 'ielm
 
   "f"   '(:ignore t :which-key "file")
   "f f" 'helm-find-files
   "f s" 'save-buffer
+  "f w" 'write-file
   "f r" 'helm-recentf
   "f t" 'treemacs
   "f r" 'counsel-recentf
@@ -1503,7 +1533,7 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   "s i" 'swiper-isearch
   "s a" 'helm-multi-swoop
   "s a" 'swiper-all
-  "s r" 'helm-ag
+  "s r" 'helm-rg
   "s g" 'counsel-grep-or-swiper
   "s w" 'avy-goto-word-or-subword-1
   "s c" 'avy-goto-char
@@ -1539,15 +1569,10 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   "p s" 'helm-projectile-switch-project
   "p b" 'helm-projectile-switch-to-buffer
 
-  "k"   '(:ignore t :which-key "flycheck")
-  "k c" 'flycheck-buffer
-  "k d" 'flycheck-disable-checker
-  "k m" 'flycheck-manual
-  "k n" 'flycheck-next-error
-  "k p" 'flycheck-previous-error
-  "k s" 'flycheck-select-checker
-  "k v" 'flycheck-verify-setup
-  "k ?" 'flycheck-describe-checker
+  "k"   '(:ignore t :which-key "flymake")
+  "k c" 'display-local-help
+  "k n" 'flymake-goto-next-error
+  "k p" 'flymake-goto-previous-error
 
   "h"   '(:ignore t :which-key "help")
   "h v" 'counsel-describe-variable-functionriable
@@ -1628,7 +1653,7 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
 
 (general-define-key
  :states 'insert
- "C-TAB" 'company-complete)
+ "C-<tab>" 'company-complete)
 
 (general-define-key
  :keymaps 'mu4e-headers-mode-map
@@ -1651,3 +1676,4 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
 
 (provide 'init)
 ;;; init.el ends here
+(put 'dired-find-alternate-file 'disabled nil)
