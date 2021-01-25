@@ -6,7 +6,8 @@
 (setq package-archives
              '(("gnu" . "https://elpa.gnu.org/packages/")
                ("melpa" . "https://melpa.org/packages/")
-               ("org" . "https://orgmode.org/elpa")))
+               ;;("org" . "https://orgmode.org/elpa")
+               ))
 (package-initialize)
 
 (setq gnutls-algorithm-priority "NORMAL:-VERS-TLS1.3")
@@ -40,14 +41,38 @@
       gc-cons-percentage 0.6
       auto-window-vscroll nil)
 
+;; ----------------------------------------------------------------------
+;; garbage-collection
+;; ----------------------------------------------------------------------
+
+(setq read-process-output-max (* 1024 1024)) ; 1MB
+(defvar my-gc 100000000) ; 100MB
+
 (add-hook 'after-init-hook
           `(lambda ()
-             (setq gc-cons-threshold 800000
+             (setq gc-cons-threshold my-gc
                    gc-cons-percentage 0.1)
              (garbage-collect)) t)
 
+;; Run GC every 60 seconds if emacs is idle.
+(run-with-idle-timer 60.0 t #'garbage-collect)
+
+(defun my-gc-minibuf ()
+  "Prevent garbage collection."
+  (setq gc-cons-threshold most-positive-fixnum))
+
+(defun my-gc-restore ()
+  "Restore garbage collection."
+  (run-at-time 1 nil (lambda () (setq gc-cons-threshold my-gc))))
+
+(add-hook 'minibuffer-setup-hook #'my-gc-minibuf)
+(add-hook 'minibuffer-exit-hook #'my-gc-restore)
+
+;; ----------------------------------------------------------------------
+
 ;; ignore custom file - different every time
-(setq custom-file (make-temp-file ""))
+;; (setq custom-file (make-temp-file ""))
+(setq custom-file "~/.emacs.d/custom.el")
 (setq custom-safe-themes t)
 (load custom-file)
 
@@ -78,7 +103,7 @@
 
 (set-face-attribute 'default nil
                     :family "Hack"
-                    :height 120
+                    :height 115
                     :weight 'normal
                     :width 'normal)
 
@@ -90,6 +115,7 @@
 (setq initial-scratch-message "")
 (setq inhibit-startup-screen t)
 (setq ring-bell-function 'ignore)
+(setq sentence-end-double-space nil)
 
 (set-fringe-mode '(8 . 0))
 
@@ -120,19 +146,13 @@
               tab-width 4
               tab-always-indent 'complete)
 
-;; remove whitespace on save
 (add-hook 'before-save-hook 'whitespace-cleanup)
 (add-hook 'text-mode-hook 'turn-on-visual-line-mode)
-
-;; move to the place when file last visited
-;; FIXME: this doesn't work
-;; (setq-default save-place t)
-;; (save-place-mode t)
 
 ;; smooth scrolling
 (setq
   scroll-margin 3
-  scroll-conservatively 1
+  scroll-conservatively 100
   scroll-preserve-screen-position t
   scroll-conservatively scroll-margin
   scroll-step 1
@@ -161,16 +181,6 @@
                   nil
                   '(("\\<\\(FIXME\\|TODO\\|BUG\\):" 1 font-lock-warning-face t)))))
 
-(defun my-beginning-of-line-dwim ()
-  "Move point to first non-whitespace character, or beginning of line."
-  (interactive "^")
-  (let ((origin (point)))
-    (beginning-of-line)
-    (and (= origin (point))
-         (back-to-indentation))))
-;; smarter C-a
-(global-set-key [remap move-beginning-of-line] #'my-beginning-of-line-dwim)
-
 ;; auto revert mode
 (global-auto-revert-mode 1)
 
@@ -193,7 +203,6 @@
 
 (use-package browse-kill-ring
   :straight t
-  :bind ("C-x C-y" . browse-kill-ring)
   :config
   (setq browse-kill-ring-quit-action 'kill-and-delete-window))
 
@@ -276,8 +285,7 @@
   (push 'toggle-window-split dired-sidebar-toggle-hidden-commands)
   (push 'rotate-windows dired-sidebar-toggle-hidden-commands)
 
-  (setq dired-sidebar-subtree-line-prefix "__")
-;; (setq dired-sidebar-theme 'vscode)
+  (setq dired-sidebar-subtree-line-prefix "  ")
   (setq dired-sidebar-use-term-integration t)
   (setq dired-sidebar-use-custom-font t))
 
@@ -296,6 +304,71 @@
 ;; ----------------------------------------------------------------------
 ;; elisp
 ;; ----------------------------------------------------------------------
+(defvar +emacs-lisp--face nil)
+
+(defvar +emacs-lisp-enable-extra-fontification t
+  "If non-nil, highlight special forms, and defined functions and variables.")
+
+(defun +emacs-lisp-highlight-vars-and-faces (end)
+  "Match defined variables and functions to END.
+Functions are differentiated into special forms, built-in functions and
+library/userland functions"
+  (catch 'matcher
+    (while (re-search-forward "\\(?:\\sw\\|\\s_\\)+" end t)
+      (let ((ppss (save-excursion (syntax-ppss))))
+        (cond ((nth 3 ppss)  ; strings
+               (search-forward "\"" end t))
+              ((nth 4 ppss)  ; comments
+               (forward-line +1))
+              ((let ((symbol (intern-soft (match-string-no-properties 0))))
+                 (and (cond ((null symbol) nil)
+                            ((eq symbol t) nil)
+                            ((keywordp symbol) nil)
+                            ((special-variable-p symbol)
+                             (setq +emacs-lisp--face 'font-lock-variable-name-face))
+                            ((and (fboundp symbol)
+                                  (eq (char-before (match-beginning 0)) ?\()
+                                  (not (memq (char-before (1- (match-beginning 0)))
+                                             (list ?\' ?\`))))
+                             (let ((unaliased (indirect-function symbol)))
+                               (unless (or (macrop unaliased)
+                                           (special-form-p unaliased))
+                                 (let (unadvised)
+                                   (while (not (eq (setq unadvised (ad-get-orig-definition unaliased))
+                                                   (setq unaliased (indirect-function unadvised)))))
+                                   unaliased)
+                                 (setq +emacs-lisp--face
+                                       (if (subrp unaliased)
+                                           'font-lock-constant-face
+                                         'font-lock-function-name-face))))))
+                      (throw 'matcher t)))))))
+    nil))
+
+;; We byte-compile to ensure they run as fast as possible:
+(dolist (fn '(+emacs-lisp-highlight-vars-and-faces))
+  (unless (byte-code-function-p (symbol-function fn))
+    (with-no-warnings (byte-compile fn))))
+
+(use-package highlight-quoted
+  :straight t)
+
+(use-package elisp-mode
+  :config
+  (setq font-lock-maximum-decoration t)
+  (add-hook 'emacs-lisp-mode-hook #'highlight-quoted-mode)
+
+  ;; Enhance elisp syntax highlighting, by highlighting defined symbols.
+  (defun my-enhanced-elisp-fontification ()
+    (font-lock-add-keywords
+     'emacs-lisp-mode
+     (append
+      ;; highlight defined, special variables & functions
+      (when +emacs-lisp-enable-extra-fontification
+      `((+emacs-lisp-highlight-vars-and-faces . +emacs-lisp--face))))))
+
+  (add-hook 'emacs-lisp-mode-hook #'my-enhanced-elisp-fontification)
+  )
+
 
 (use-package eldoc
   :diminish eldoc-mode
@@ -316,16 +389,7 @@
   :hook ((emacs-lisp-mode ielm-mode lisp-interaction-mode) . elisp-slime-nav-mode))
 
 (use-package macrostep
-  :straight t
-  :bind
-  (:map emacs-lisp-mode-map
-        ("C-c C-e" . macrostep-expand))
-  (:map macrostep-keymap
-        ("J" . macrostep-next-macro)
-        ("K" . macrostep-prev-macro)
-        ("e" . macrostep-expand)
-        ("c" . macrostep-collapse)
-        ("q" . macrostep-collapse-all)))
+  :straight t)
 
 (use-package paredit
   :straight t
@@ -361,6 +425,10 @@
 ;;   ;; (set-face-background 'highlight-indent-guides-odd-face "gray")
 ;;   ;; (set-face-background 'highlight-indent-guides-even-face "gray")
 ;;   (add-hook 'prog-mode-hook 'highlight-indent-guides-mode))
+
+(use-package aggressive-indent
+  :straight t
+  :hook ((emacs-lisp-mode scheme-mode) . aggressive-indent-mode))
 
 ;; ----------------------------------------------------------------------
 ;; eshell
@@ -469,44 +537,6 @@
 )
 
 ;; ----------------------------------------------------------------------
-;; flycheck
-;; ----------------------------------------------------------------------
-
-(use-package flycheck
-  :straight t
-  :disabled t
-  :diminish " ✓"
-  :commands global-flycheck-mode
-  :init (add-hook 'prog-mode-hook 'global-flycheck-mode)
-  :config
-  (progn
-    (setq-default flycheck-emacs-lisp-initialize-packages t
-                  flycheck-highlighting-mode 'lines
-                  flycheck-display-errors-delay 0.3
-                  flycheck-check-syntax-automatically '(save)
-                  flycheck-disabled-checkers '(c/c++-clang c/c++-gcc))
-    ;; Define fringe indicator / warning levels
-    (flycheck-define-error-level 'error
-      :severity 2
-      :overlay-category 'flycheck-error-overlay
-      :fringe-bitmap 'flycheck-fringe-bitmap-ball
-      :fringe-face 'flycheck-fringe-error)
-    (flycheck-define-error-level 'warning
-      :severity 1
-      :overlay-category 'flycheck-warning-overlay
-      :fringe-bitmap 'flycheck-fringe-bitmap-ball
-      :fringe-face 'flycheck-fringe-warning)
-    (flycheck-define-error-level 'infoq
-      :severity 0
-      :overlay-category 'flycheck-info-overlay
-      :fringe-bitmap 'flycheck-fringe-bitmap-ball
-      :fringe-face 'flycheck-fringe-info)
-    (custom-set-variables
-     '(flycheck-python-flake8-executable "python3")
-     '(flycheck-python-pycompile-executable "python3")
-     '(flycheck-python-pylint-executable "python3"))))
-
-;; ----------------------------------------------------------------------
 ;; evil
 ;; ----------------------------------------------------------------------
 
@@ -530,6 +560,11 @@
   :straight t
   :after evil)
 
+;; Evil everwhere
+(setq evil-emacs-state-modes nil
+      evil-insert-state-modes nil
+      evil-motion-state-modes nil)
+
 ;;; esc quits
 (defun minibuffer-keyboard-quit ()
   "Abort recursive edit.
@@ -549,21 +584,11 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
 (define-key minibuffer-local-must-match-map [escape] 'minibuffer-keyboard-quit)
 (define-key minibuffer-local-isearch-map [escape] 'minibuffer-keyboard-quit)
 
-;; (defun exit-insert-save ()
-;;   (if (buffer-file-name)
-;;     (evil-save (buffer-file-name))))
-
-;; (add-hook 'evil-insert-state-exit-hook 'exit-insert-save)
-
-(define-key evil-normal-state-map (kbd "DEL") (lambda ()
-                                               (interactive)
-                                               (previous-line 10)
-                                               (evil-scroll-line-up 10)))
-
-(define-key evil-normal-state-map (kbd "=") (lambda ()
-                                              (interactive)
-                                              (next-line 10)
-                                              (evil-scroll-line-down 10)))
+(use-package evil-visual-mark-mode
+  :defer 3
+  :straight t
+  :config
+  (evil-visual-mark-mode))
 
 ;; ----------------------------------------------------------------------
 ;; helm
@@ -598,7 +623,7 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
           helm-quick-update t
           helm-idle-delay 0.01
           helm-input-idle-delay 0.01
-         helm-split-window-default-side 'other
+          helm-split-window-default-side 'other
           helm-split-window-in-side-p t
           helm-candidate-number-limit 200
           helm-move-to-line-cycle-in-source nil
@@ -619,7 +644,7 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
                                        " --smart-case"
                                        " --no-heading"
                                        " --line-number %s %s %s")
-      helm-grep-file-path-style 'relative)
+          helm-grep-file-path-style 'relative)
 
     ;; hide helm sources lines
     (set-face-attribute 'helm-source-header nil :height 0.1)
@@ -644,14 +669,6 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
   :config
   (setq helm-swoop-speed-or-color t)
   :commands (helm-swoop helm-swoop-without-pre-input helm-multi-swoop helm-multi-swoop-all))
-
-(use-package helm-projectile
-  :straight t
-  :after (projectile helm)
-  :commands (helm-projectile-find-file helm-projectile-switch-project
-                                       helm-projectile-rg helm-projectile-switch-to-buffer)
-  :config
-  (helm-projectile-on))
 
 (use-package helm-rg
   :straight t
@@ -724,11 +741,192 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
                                            try-complete-lisp-symbol)))
 
 ;; ----------------------------------------------------------------------
+;; selectrum / consult / prescient / marginalia / embark
+;; ----------------------------------------------------------------------
+
+(use-package selectrum
+  :straight t
+  :config
+  (setq selectrum-display-action '(display-buffer-in-side-window
+                                   (side . bottom)
+                                   (slot . -1)))
+  (setq selectrum-extend-current-candidate-highlight t)
+  (setq selectrum-num-candidates-displayed 15)
+  (setq selectrum-fix-minibuffer-height t)
+  (selectrum-mode +1))
+
+(use-package prescient
+  :straight t)
+
+(use-package company-prescient
+  :straight t)
+
+(use-package selectrum-prescient
+  :straight t
+  :config
+  (selectrum-prescient-mode +1)
+  (prescient-persist-mode +1))
+
+(use-package consult
+  :straight (consult :type git
+                     :host github
+                     :branch "main"
+                     :repo "minad/consult")
+  ;; Replace bindings. Lazily loaded due by `use-package'.
+  :bind ;; C-c bindings (mode-specific-map)
+  ("C-c h" . consult-history)
+  ("C-c m" . consult-mode-command)
+  ("C-c b" . consult-bookmark)
+  ;; C-x bindings (ctl-x-map)
+  ("C-x M-:" . consult-complex-command)
+  ("C-x b" . consult-buffer)
+  ("C-x 4 b" . consult-buffer-other-window)
+  ("C-x 5 b" . consult-buffer-other-frame)
+  ;; Custom M-# bindings for fast register access
+  ("M-#" . consult-register-load)
+  ("M-'" . consult-register-store)
+  ("C-M-#" . consult-register)
+  ;; M-g bindings (goto-map)
+  ("M-g g" . consult-goto-line)
+  ("M-g M-g" . consult-goto-line)
+  ("M-g o" . consult-outline)
+  ("M-g m" . consult-mark)
+  ("M-g k" . consult-global-mark)
+  ("M-g i" . consult-project-imenu) ;; Alternative: consult-imenu
+  ("M-g e" . consult-error)
+  ;; M-s bindings (search-map)
+  ("M-s g" . consult-git-grep)      ;; Alternatives: consult-grep, consult-ripgrep
+  ("M-s f" . consult-find)          ;; Alternatives: consult-locate, my-fdfind
+  ("M-s l" . consult-line)
+  ("M-s m" . consult-multi-occur)
+  ("M-s k" . consult-keep-lines)
+  ("M-s u" . consult-focus-lines)
+  ;; Other bindings
+  ("M-y" . consult-yank-pop)
+  ("<help> a" . consult-apropos)
+
+  ;; The :init configuration is always executed (Not lazy!)
+  :init
+
+  ;; Custom command wrappers. It is generally encouraged to write your own
+  ;; commands based on the Consult commands. Some commands have arguments which
+  ;; allow tweaking. Furthermore global configuration variables can be set
+  ;; locally in a let-binding.
+  (defun my-fdfind (&optional dir)
+    (interactive "P")
+    (let ((consult-find-command '("fdfind" "--color=never" "--full-path")))
+      (consult-find dir)))
+
+  ;; Optionally configure the register preview function. This gives a
+  ;; consistent display for both `consult-register', `consult-register-load',
+  ;; `consult-register-store' and the Emacs built-ins.
+  (setq register-preview-delay 0
+        register-preview-function #'consult-register-preview)
+  ;; Optionally tweak the register preview window.
+  ;; * Sort the registers
+  ;; * Hide the mode line
+  ;; * Resize the window, such that the contents fit exactly
+  (advice-add #'register-preview :around
+              (lambda (fun buffer &optional show-empty)
+                (let ((register-alist (seq-sort #'car-less-than-car register-alist)))
+                  (funcall fun buffer show-empty))
+                (when-let (win (get-buffer-window buffer))
+                  (with-selected-window win
+                    (setq-local mode-line-format nil)
+                    (setq-local window-min-height 1)
+                    (fit-window-to-buffer)))))
+
+  ;; Configure other variables and modes in the :config section, after
+  ;; lazily loading the package
+  :config
+
+  ;; Configure preview. Note that the preview-key can also be configured on a
+  ;; per-command basis via `consult-config'.
+  ;; The default value is 'any, such that any key triggers the preview.
+  ;; (setq consult-preview-key 'any)
+  ;; (setq consult-preview-key (kbd "M-p"))
+  ;; (setq consult-preview-key (list (kbd "<S-down>") (kbd "<S-up>")))
+
+  ;; Optionally configure narrowing key.
+  ;; Both < and C-+ work reasonably well.
+  (setq consult-narrow-key "<") ;; (kbd "C-+")
+  ;; Optionally make narrowing help available in the minibuffer.
+  ;; Probably not needed if you are using which-key.
+  ;; (define-key consult-narrow-map (vconcat consult-narrow-key "?") #'consult-narrow-help)
+
+  ;; Optional configure a view library to be used by `consult-buffer'.
+  ;; The view library must provide two functions, one to open the view by name,
+  ;; and one function which must return a list of views as strings.
+  ;; Example: https://github.com/minad/bookmark-view/
+  ;; (setq consult-view-open-function #'bookmark-jump
+  ;;       consult-view-list-function #'bookmark-view-names)
+
+  ;; Optionally configure a function which returns the project root directory
+  (autoload 'projectile-project-root "projectile")
+  (setq consult-project-root-function #'projectile-project-root))
+
+(use-package marginalia
+  :straight (marginalia :type git
+                        :host github
+                        :branch "main"
+                        :repo "minad/marginalia")
+  :bind (:map minibuffer-local-map
+              ("C-M-a" . marginalia-cycle)
+         ;; When using the Embark package, you can bind `marginalia-cycle' as an Embark action!
+         ;;:map embark-general-map
+         ;;     ("A" . marginalia-cycle)
+        )
+
+  ;; The :init configuration is always executed (Not lazy!)
+  :init
+
+  ;; Must be in the :init section of use-package such that the mode gets
+  ;; enabled right away. Note that this forces loading the package.
+  (marginalia-mode)
+
+  ;; When using Selectrum, ensure that Selectrum is refreshed when cycling annotations.
+  (advice-add #'marginalia-cycle :after
+              (lambda () (when (bound-and-true-p selectrum-mode) (selectrum-exhibit))))
+
+  ;; Prefer richer, more heavy, annotations over the lighter default variant.
+  ;; E.g. M-x will show the documentation string additional to the keybinding.
+  ;; By default only the keybinding is shown as annotation.
+  ;; Note that there is the command `marginalia-cycle' to
+  ;; switch between the annotators.
+  ;; (setq marginalia-annotators
+  ;;    '(marginalia-annotators-heavy marginalia-annotators-light nil))
+  )
+
+(use-package embark
+  :straight (embark :type git
+                    :host github
+                    :repo "oantolin/embark")
+  :bind
+  ("C-S-a" . embark-act)
+  :config
+  (setq embark-action-indicator
+        (lambda (map)
+          (which-key--show-keymap "Embark" map nil nil 'no-paging)
+          #'which-key--hide-popup-ignore-command)
+        embark-become-indator embark-action-indicator))
+
+;; Consult users will also want the embark-consult
+ ;; (use-package embark-consult
+ ;;  :straight t
+ ;;  :after (embark consult)
+ ;;  :demand t ; only necessary if you have the hook below
+ ;;  ;; if you want to have consult previews as you move around an
+ ;;  ;; auto-updating embark collect buffer
+ ;;  :hook
+ ;;  (embark-collect-mode . embark-consult-preview-minor-mode))
+
+;; ----------------------------------------------------------------------
 ;; ivy
 ;; ----------------------------------------------------------------------
 
 (use-package ivy
   :straight t
+  :disabled t
   :diminish ivy-mode
   :commands (ivy-switch-buffer ivy-push-view ivy-pop-view)
   :hook (emacs-startup . ivy-mode)
@@ -749,11 +947,13 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
 
 (use-package swiper
   :straight t
+  :disabled t
   :commands (swiper
              swiper-all))
 
 (use-package counsel
   :straight t
+  :disabled t
   :config
   (defun my/counsel-rg-thing-at-point ()
     (interactive)
@@ -772,6 +972,7 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
 ;; `smex': Used by counsel-M-x
 (use-package smex
   :straight t
+  :disabled t
   :commands (smex smex-major-mode-commands)
   :config
   (smex-initialize))
@@ -782,6 +983,21 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
 
 (use-package hydra
   :straight t)
+
+;; ----------------------------------------------------------------------
+;; helpful
+;; ----------------------------------------------------------------------
+
+(use-package helpful
+  :straight t
+  :bind
+  ([remap describe-command] . helpful-command)
+  ([remap describe-key] . helpful-key)
+  :init
+  ;; press `q` or `<escape>` to quit (kill) the buffer
+  (evil-define-key 'normal helpful-mode-map "q" #'kill-this-buffer)
+  ;; press `K` to see the help!
+  (evil-define-key 'normal 'global "K" #'helpful-at-point))
 
 ;; ----------------------------------------------------------------------
 ;; eglot
@@ -843,8 +1059,7 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
 ;; ----------------------------------------------------------------------
 
 (use-package magit
-  :straight t
-  :bind ("C-c m" . magit-status))
+  :straight t)
 
 (use-package git-gutter
   :straight t
@@ -853,19 +1068,14 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
   (progn
     (add-hook 'prog-mode-hook 'git-gutter-mode)
     (add-hook 'org-mode-hook 'git-gutter-mode))
-  :config
-  (progn
-    (custom-set-variables
-     '(git-gutter:modified-sign ">")
-     '(git-gutter:added-sign "+")
-     '(git-gutter:deleted-sign "-"))
-    (set-face-foreground 'git-gutter:deleted "#990A1B")
-    (set-face-foreground 'git-gutter:modified "#00736F")
-    (set-face-foreground 'git-gutter:added "#546E00")
-    (set-face-background 'git-gutter:modified "none")
-    (set-face-background 'git-gutter:added "none")
-    (set-face-background 'git-gutter:deleted "none"))
-)
+  :custom
+  (git-gutter:modified-sign ">")
+  (git-gutter:added-sign "+")
+  (git-gutter:deleted-sign "-")
+  :custom-face
+  (git-gutter:modified ((t (:background "#c0b18b" :foreground "#2f2f2f"))))
+  (git-gutter:added    ((t (:background "#84edb9" :foreground "#2f2f2f"))))
+  (git-gutter:deleted  ((t (:background "#d75f5f" :foreground "#2f2f2f")))))
 
 ;; exwm fix to get magit-ediff to work
 (use-package ediff
@@ -1069,11 +1279,11 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
   :straight t
   :config
   (setq modus-operandi-theme-bold-constructs t)
-  (setq modus-operandi-theme-fringes nil)
-  (setq modus-operandi-theme-syntax 'alt-syntax-yellow-comments)
-  (setq modus-operandi-theme-prompts 'subtle)
+  (setq modus-operandi-theme-fringes t)
   (setq modus-operandi-theme-completions 'moderate)
   (setq modus-operandi-theme-org-blocks 'grayscale)
+  (setq modus-operandi-theme-prompts 'subtle)
+  (setq modus-operandi-theme-syntax 'alt-syntax-yellow-comments)
   (load-theme 'modus-operandi t))
 
 ;; (use-package modus-vivendi-theme
@@ -1097,20 +1307,16 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
                treemacs-fringe-indicator-mode
                treemacs-git-mode)
     :config
-    (setq treemacs-collapse-dirs           (if treemacs-python-executable 3 0)
-          treemacs-sorting                 'alphabetic-case-insensitive-desc
-          treemacs-follow-after-init       t
-          treemacs-is-never-other-window   t
-          treemacs-silent-filewatch        t
-          treemacs-silent-refresh          t
-          treemacs-width                   40)
+    (setq treemacs-collapse-dirs (if treemacs-python-executable 3 0)
+          treemacs-sorting 'alphabetic-case-insensitive-desc
+          treemacs-follow-after-init t
+          treemacs-is-never-other-window t
+          treemacs-silent-filewatch t
+          treemacs-silent-refresh t
+          treemacs-width 40)
 
     (treemacs-follow-mode t)
     (treemacs-filewatch-mode t))
-
-(use-package treemacs-projectile
-  :straight t
-  :after treemacs projectile)
 
 (use-package treemacs-magit
   :straight t
@@ -1120,9 +1326,10 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
 ;; vterm
 ;; ----------------------------------------------------------------------
 
-;; (add-to-list 'load-path "/home/edgar/emacs-libterm")
 (use-package vterm
-  :straight t)
+  :straight t
+  ;; TODO: is this working?
+  :hook (vterm-mode . (lambda () (setq-local global-hl-line-mode nil))))
 
 ;; ----------------------------------------------------------------------
 ;; which key
@@ -1171,26 +1378,6 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
   :config
   (windmove-default-keybindings))
 
-(use-package beacon
-  :straight t
-  :diminish beacon-mode
-  :config
-  (progn
-    (setq beacon-blink-when-point-moves-vertically nil)
-    (setq beacon-blink-when-point-moves-horizontally nil)
-    (setq beacon-blink-when-buffer-changes t)
-    (setq beacon-blink-when-window-scrolls t)
-    (setq beacon-blink-when-window-changes t)
-    (setq beacon-blink-when-focused nil)
-
-    (setq beacon-blink-duration 0.3)
-    (setq beacon-blink-delay 0.3)
-    (setq beacon-size 20)
-    (setq beacon-color "grey")
-    (add-to-list 'beacon-dont-blink-major-modes 'shell-mode)
-    (add-to-list 'beacon-dont-blink-major-modes 'inferior-python-mode)
-    (beacon-mode 1)))
-
 (use-package dimmer
   :straight t
   :config
@@ -1226,26 +1413,6 @@ then it takes a second \\[keyboard-quit] to abort the minibuffer."
 ;; ----------------------------------------------------------------------
 ;; hydras
 ;; ----------------------------------------------------------------------
-
-;; TODO: look a evil version
-(defhydra hydra-rectangle (:body-pre (rectangle-mark-mode 1) :post (deactivate-mark))
-  "
-    -----          |   ^_i_^   |    _d_elete    _k_ill
-Rectangle Mode     | _j_   _l_ |    _s_tring    _y_ank
-    -----          |   ^_k_^   |    _c_opy      _r_eset
-"
-  ("i" rectangle-previous-line nil)
-  ("k" rectangle-next-line nil)
-  ("j" rectangle-backward-char nil)
-  ("l" rectangle-forward-char nil)
-  ("d" delete-rectangle nil)
-  ("s" string-rectangle nil :exit t)
-  ("k" kill-rectangle nil)
-  ("y" yank-rectangle nil :exit t)
-  ("c" copy-rectangle-as-kill nil)
-  ("r" (progn (if (region-active-p)
-                  (deactivate-mark))
-              (rectangle-mark-mode 1)) nil))
 
 ;; TODO: look at evil version
 (use-package multiple-cursors
@@ -1418,6 +1585,7 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
 
 (general-create-definer my-leader-def
   ;; :prefix my-leader
+;;  :keymaps 'override
   :prefix "SPC")
 
 (general-create-definer my-local-leader-def
@@ -1425,12 +1593,12 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   :prefix "SPC m")
 
 (defun scroll-half-page-down ()
-  "scroll down half the page"
+  "Scroll down half the page."
   (interactive)
   (scroll-down (/ (window-body-height) 2)))
 
 (defun scroll-half-page-up ()
-  "scroll up half the page"
+  "Scroll up half the page."
   (interactive)
   (scroll-up (/ (window-body-height) 2)))
 
@@ -1441,7 +1609,6 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
 
 (my-leader-def
   :states 'normal
-  ;; make leader key work everywhere
   :keymaps 'override
   "w"    '(:ignore t :which-key "window")
   "w l"  'windmove-right
@@ -1464,11 +1631,12 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   "w <" 'eyebrowse-prev-window-config
   "w c" 'eyebrowse-create-window-config
 
-  "x" 'helm-M-x
+  "x" 'execute-extended-command
   "d d" 'dired
 
   "b"   '(:ignore t :which-key "buffer")
-  "b b" 'helm-mini
+  ;; "b b" 'helm-mini
+  "b b" 'consult-buffer
   "b k" 'kill-buffer
   "b p" 'previous-buffer
   "b n" 'next-buffer
@@ -1483,11 +1651,9 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   ;; "C-M-S-L" 'buf-move-right
 
   "c"   '(:ignore t :which-key "code")
-;; "c l" 'helm-locate-library
   "c s" 'helm-info-at-point
   "c u" 'helm-ucs
-
-  ;; TODO: put within LSP mode map
+  "c y" 'browse-kill-ring
   "c l"     '(:ignore t :which-key "lsp")
   "c l d"   'eglot-find-declaration
   "c l D"   'xref-find-definitions
@@ -1514,14 +1680,19 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   "e /" 'paredit-comment-dwim
   "e (" 'paredit-reindent-defun
   "e i" 'ielm
+  "e m" '(:ignore t :which-key "macrostep")
+  "e m e" 'macrostep-expand
+  "e m n" 'macrostep-next-macro
+  "e m p" 'macrostep-prev-macro
+  "e m c" 'macrostep-collapse
+  "e m q" 'macrostep-collapse-all
 
   "f"   '(:ignore t :which-key "file")
-  "f f" 'helm-find-files
+  "f f" 'find-file
   "f s" 'save-buffer
   "f w" 'write-file
-  "f r" 'helm-recentf
+  "f r" 'consult-recent-file
   "f t" 'treemacs
-  "f r" 'counsel-recentf
   "f d" 'dired-sidebar-toggle-sidebar
 
   "l"   '(:ignore t :which-key "launch")
@@ -1530,14 +1701,16 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   "s"   '(:ignore t :which-key "search")
   "s s" 'helm-swoop-without-pre-input
   "s p" 'helm-swoop
-  "s i" 'swiper-isearch
+  "s l" 'consult-line
+  "s i" 'consult-isearch
   "s a" 'helm-multi-swoop
-  "s a" 'swiper-all
-  "s r" 'helm-rg
-  "s g" 'counsel-grep-or-swiper
+  ;;  "s a" 'swiper-all
+  ;; "s r" 'helm-rg
+  "s r" 'consult-ripgrep
+  "s g" 'consult-git-grep
   "s w" 'avy-goto-word-or-subword-1
   "s c" 'avy-goto-char
-  "s l" 'avy-goto-char-in-line
+  ;;  "s l" 'avy-goto-char-in-line
   "s m" 'evil-show-marks
 
   "q"   '(:ignore t :which-key "quit")
@@ -1559,18 +1732,26 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   "g g" 'counsel-git-grep
 
   "j"   '(:ignore t :which-key "jump")
-  "j i" 'helm-semantic-or-imenu
-  "j o" 'helm-occur
+  "j i" 'consult-project-imenu
+  "j o" 'consult-multi-occur
   "j l" 'helm-locate-library
+  "j g" 'consult-goto-line
 
   "p"   '(:ignore t :which-key "project")
   "p r" 'helm-projectile-rg
-  "p f" 'helm-projectile-find-file
-  "p s" 'helm-projectile-switch-project
-  "p b" 'helm-projectile-switch-to-buffer
+  "p f" 'project-find-file
+  "p s" 'project-switch-project
+  "p b" 'project-switch-to-buffer
+  "p d" 'project-dired
+  "p c" 'project-compile
+  "p e" 'project-eshell
+  "p k" 'project-kill-buffers
+  "p i" 'consult-project-imenu
 
   "k"   '(:ignore t :which-key "flymake")
   "k c" 'display-local-help
+  "k e" 'consult-error
+  "k f" 'consult-flymake
   "k n" 'flymake-goto-next-error
   "k p" 'flymake-goto-previous-error
 
@@ -1593,8 +1774,7 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   "h b" 'describe-bindings
   "h S" 'info-lookup-symbol
 
- ;; "h m" '(hydra-multiple-cursors/body :which-key "multiple-cursors")
- ;; "h r" '(hydra-rectangle/body :which-key "rectangle")
+  ;; "h m" '(hydra-multiple-cursors/body :which-key "multiple-cursors")
 
   "v"   '(:ignore t :which-key "view")
   "v p" 'ivy-push-view
@@ -1603,28 +1783,20 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   "v l" 'my/load-ivy-views
   "v v" 'ivy-switch-view
 
-  ;; FIXME: this is totally wrong
-  "m"   '(:ignore t :which-key "minibuffer")
-  "m h" 'helm-minibuffer-history
-
   "o"   '(:ignore t :which-key "org")
   "o m" 'org-mu4e-store-and-capture)
 
-(global-set-key [remap apropos] #'helm-apropos)
-(global-set-key [remap find-library] #'helm-locate-library)
-(global-set-key [remap bookmark-jump]  #'helm-bookmarks)
-(global-set-key [remap execute-extended-command]  #'helm-M-x)
-(global-set-key [remap find-file] #'helm-find-files)
-(global-set-key [remap locate] #'helm-locate)
-(global-set-key [remap imenu] #'helm-semantic-or-imenu)
-(global-set-key [remap noop-show-kill-ring] #'helm-show-kill-ring)
-(global-set-key [remap switch-to-buffer] #'helm-buffers-list)
-(global-set-key [remap projectile-find-file] #'helm-projectile-find-file)
-(global-set-key [remap projectile-recentf] #'helm-projectile-recentf)
-(global-set-key [remap projectile-switch-project] #'helm-projectile-switch-project)
-(global-set-key [remap projectile-switch-to-buffer] #'helm-projectile-switch-to-buffer)
-(global-set-key [remap recentf-open-files] #'helm-recentf)
-(global-set-key [remap yank-pop] #'helm-show-kill-ring)
+;; (global-set-key [remap apropos] #'helm-apropos)
+;; (global-set-key [remap find-library] #'helm-locate-library)
+;; (global-set-key [remap bookmark-jump]  #'helm-bookmarks)
+;; (global-set-key [remap execute-extended-command]  #'helm-M-x)
+;; (global-set-key [remap find-file] #'helm-find-files)
+;; (global-set-key [remap locate] #'helm-locate)
+;; (global-set-key [remap imenu] #'helm-semantic-or-imenu)
+;; (global-set-key [remap noop-show-kill-ring] #'helm-show-kill-ring)
+;; (global-set-key [remap switch-to-buffer] #'helm-buffers-list)
+;; (global-set-key [remap recentf-open-files] #'helm-recentf)
+;; (global-set-key [remap yank-pop] #'helm-show-kill-ring)
 
 ;; Get prefixes to work in X applications
 ;; (when (equal window-system 'x)
@@ -1638,11 +1810,6 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
 ;;   )
 
 ;;; Mode Keybindings
-
-(general-define-key
- :keymaps 'projectile-mode-map
- "s-p" '(:ignore t :which "projectile mode map")
- "s-p p" 'projectile-command-map)
 
 (general-define-key
  :keymaps 'company-active-map
@@ -1674,6 +1841,6 @@ _o_: org-cap | _C--_: show less   | _*_: *thing  | _q_: quit hdrs | _j_: jump2ma
   (progn
     (setq dumb-jump-selector 'ivy)))
 
+(put 'dired-find-alternate-file 'disabled nil)
 (provide 'init)
 ;;; init.el ends here
-(put 'dired-find-alternate-file 'disabled nil)
