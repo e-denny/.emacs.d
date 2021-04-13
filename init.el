@@ -18,34 +18,16 @@
 
 (eval-when-compile
   (require 'use-package)
-(setq use-package-verbose t))
-
-;; (defvar bootstrap-version)
-;; (let ((bootstrap-file
-;;        (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
-;;       (bootstrap-version 5))
-;;   (unless (file-exists-p bootstrap-file)
-;;     (with-current-buffer
-;;         (url-retrieve-synchronously
-;;          "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
-;;          'silent 'inhibit-cookies)
-;;       (goto-char (point-max))
-;;       (eval-print-last-sexp)))
-;;   (load bootstrap-file nil 'nomessage))
+  (setq use-package-verbose t))
 
 (if (and (fboundp 'native-comp-available-p)
-       (native-comp-available-p))
-  (message "Native compilation is available")
-(message "Native complation is *not* available"))
+         (native-comp-available-p))
+    (message "Native compilation is available")
+  (message "Native complation is *not* available"))
 
 (setq comp-deferred-compilation t)
 
-;; install use-package with straight
-;; (straight-use-package 'use-package)
-
 (customize-set-variable 'use-package-compute-statistics t)
-
-;; (setq straight-check-for-modifications '(check-on-save))
 
 ;; ----------------------------------------------------------------------
 ;; garbage-collection
@@ -88,6 +70,7 @@
 (diminish 'auto-revert-mode "")
 (diminish 'isearch-mode "?")
 (diminish 'abbrev-mode "")
+(diminish 'org-roam-mode "")
 
 ;; ----------------------------------------------------------------------
 ;; defaults
@@ -155,28 +138,26 @@
 (add-hook 'text-mode-hook 'turn-on-visual-line-mode)
 
 ;; smooth scrolling
-(setq
- scroll-margin 3
- scroll-conservatively 100
- scroll-preserve-screen-position t
- scroll-conservatively scroll-margin
- scroll-step 1
- mouse-wheel-scroll-amount '(6 ((shift) . 1))
- mouse-wheel-progressive-speed nil
- scroll-error-top-bottom t
- next-error-recenter (quote (4))
- )
+(setq scroll-margin 3
+      scroll-conservatively 100
+      scroll-preserve-screen-position t
+      scroll-conservatively scroll-margin
+      scroll-step 1
+      mouse-wheel-scroll-amount '(6 ((shift) . 1))
+      mouse-wheel-progressive-speed nil
+      scroll-error-top-bottom t
+      next-error-recenter (quote (4))
+      )
 
-; don't load old bype code
+;; don't load old bype code
 (setq load-prefer-newer t)
 
 (setq backup-directory-alist '(("." . "~/.emacs.d/backup"))
-    backup-by-copying t    ; Don't delink hardlinks
-    version-control t      ; Use version numbers on backups
-    delete-old-versions t  ; Automatically delete excess backups
-    kept-new-versions 20   ; how many of the newest versions to keep
-    kept-old-versions 5    ; and how many of the old
-    )
+      backup-by-copying t
+      version-control t
+      delete-old-versions t
+      kept-new-versions 20
+      kept-old-versions 5)
 
 (add-hook 'prog-mode-hook
                (lambda ()
@@ -232,6 +213,16 @@
   :ensure t
   :diminish company-box-mode
   :hook (company-mode . company-box-mode))
+
+;; ----------------------------------------------------------------------
+;; good-scroll
+;; ----------------------------------------------------------------------
+
+(use-package good-scroll
+  :ensure t
+  :disabled t
+  :config
+  (good-scroll-mode 1))
 
 ;; ----------------------------------------------------------------------
 ;; dired
@@ -560,100 +551,11 @@ library/userland functions"
 ;;   (setq eyebrowse-new-workspace t)
 ;; )
 
-;; ;; ----------------------------------------------------------------------
-;; ;; evil
-;; ;; ----------------------------------------------------------------------
-
-;; (use-package evil
-;;   :straight t
-;;   :config
-;;   (evil-set-initial-state 'edebug-mode 'normal)
-;;   (setq evil-symbol-word-search t
-;;         evil-want-visual-char-semi-exclusive t
-;;         evil-visual-state-cursor 'hollow
-;;         evil-ex-interactive-search-highlight 'selected-window)
-;;   (evil-mode 1)
-
-;;   (use-package evil-leader
-;;     :straight t
-;;     :config
-;;     (global-evil-leader-mode t)
-;;     (evil-leader/set-leader "<SPC>")))
-
-;; (use-package evil-surround
-;;   :straight t
-;;   :after evil
-;;   :config (global-evil-surround-mode))
-
-;; (use-package evil-indent-textobject
-;;   :straight t
-;;   :after evil)
-
-;; ;;; esc quits
-;; (defun minibuffer-keyboard-quit ()
-;;   "Abort recursive edit.
-;; In Delete Selection mode, if the mark is active, just deactivate it;
-;; then it takes a second \\[keyboard-quit] to abort the minibuffer."
-;;   (interactive)
-;;   (if (and delete-selection-mode transient-mark-mode mark-active)
-;;       (setq deactivate-mark  t)
-;;     (when (get-buffer "*Completions*") (delete-windows-on "*Completions*"))
-;;     (abort-recursive-edit)))
-
-;; (define-key evil-normal-state-map [escape] 'keyboard-quit)
-;; (define-key evil-visual-state-map [escape] 'keyboard-quit)
 (define-key minibuffer-local-map [escape] 'minibuffer-keyboard-quit)
 (define-key minibuffer-local-ns-map [escape] 'minibuffer-keyboard-quit)
 (define-key minibuffer-local-completion-map [escape] 'minibuffer-keyboard-quit)
 (define-key minibuffer-local-must-match-map [escape] 'minibuffer-keyboard-quit)
 (define-key minibuffer-local-isearch-map [escape] 'minibuffer-keyboard-quit)
-
-;; (use-package evil-snipe
-;;   :straight t
-;;   :after evil
-;;   :diminish evil-snipe-local-mode
-;;   :hook (magit-mode . turn-off-evil-snipe-override-mode)
-;;   :custom
-;;   (evil-snipe-scope 'visible)
-;;   (evil-snipe-repeat-scope 'whole-visible)
-;;   (evil-snipe-spillover-scope 'whole-buffer)
-;;   :config
-;;   (evil-snipe-mode +1)
-;;   (evil-snipe-override-mode +1))
-
-;; (use-package evil-easymotion
-;;   :straight t
-;;   :after evil
-;;   :commands evilem-create evilem-default-keybindings
-;;   :config
-;;   ;; Use evil-search backend, instead of isearch
-;;   (evilem-make-motion evilem-motion-search-next #'evil-ex-search-next
-;;                       :bind ((evil-ex-search-highlight-all nil)))
-;;   (evilem-make-motion evilem-motion-search-previous #'evil-ex-search-previous
-;;                       :bind ((evil-ex-search-highlight-all nil)))
-;;   (evilem-make-motion evilem-motion-search-word-forward #'evil-ex-search-word-forward
-;;                       :bind ((evil-ex-search-highlight-all nil)))
-;;   (evilem-make-motion evilem-motion-search-word-backward #'evil-ex-search-word-backward
-;;                       :bind ((evil-ex-search-highlight-all nil)))
-
-;;   ;; Rebind scope of w/W/e/E/ge/gE evil-easymotion motions to the visible
-;;   ;; buffer, rather than just the current line.
-;;   (put 'visible 'bounds-of-thing-at-point (lambda () (cons (window-start) (window-end))))
-;;   (evilem-make-motion evilem-motion-forward-word-begin #'evil-forward-word-begin :scope 'visible)
-;;   (evilem-make-motion evilem-motion-forward-WORD-begin #'evil-forward-WORD-begin :scope 'visible)
-;;   (evilem-make-motion evilem-motion-forward-word-end #'evil-forward-word-end :scope 'visible)
-;;   (evilem-make-motion evilem-motion-forward-WORD-end #'evil-forward-WORD-end :scope 'visible)
-;;   (evilem-make-motion evilem-motion-backward-word-begin #'evil-backward-word-begin :scope 'visible)
-;;   (evilem-make-motion evilem-motion-backward-WORD-begin #'evil-backward-WORD-begin :scope 'visible)
-;;   (evilem-make-motion evilem-motion-backward-word-end #'evil-backward-word-end :scope 'visible)
-;;   (evilem-make-motion evilem-motion-backward-WORD-end #'evil-backward-WORD-end :scope 'visible)
-;;   )
-
-;; (use-package edebug-mode
-;;   :straight (:type built-in)
-;;   :config
-;;   (evil-set-initial-state 'edebug-mode 'normal))
-
 
 ;; ----------------------------------------------------------------------
 ;; scroll-on-jump
@@ -782,36 +684,19 @@ library/userland functions"
 
 (use-package consult
   :ensure t
-  ;; Replace bindings. Lazily loaded due by `use-package'.
-  ;; :bind ;; C-c bindings (mode-specific-map)
   ;; ("C-c h" . consult-history)
   ;; ("C-c m" . consult-mode-command)
-  ;; ("C-c b" . consult-bookmark)
-  ;; ;; C-x bindings (ctl-x-map)
   ;; ("C-x M-:" . consult-complex-command)
-  ;; ("C-x b" . consult-buffer)
   ;; ("C-x 4 b" . consult-buffer-other-window)
-  ;; ("C-x 5 b" . consult-buffer-other-frame)
-  ;; ;; Custom M-# bindings for fast register access
   ;; ("M-#" . consult-register-load)
   ;; ("M-'" . consult-register-store)
   ;; ("C-M-#" . consult-register)
-  ;; ;; M-g bindings (goto-map)
-  ;; ("M-g g" . consult-goto-line)
-  ;; ("M-g M-g" . consult-goto-line)
   ;; ("M-g o" . consult-outline)
   ;; ("M-g m" . consult-mark)
   ;; ("M-g k" . consult-global-mark)
-  ;; ("M-g i" . consult-project-imenu) ;; Alternative: consult-imenu
-  ;; ("M-g e" . consult-error)
-  ;; ;; M-s bindings (search-map)
-  ;; ("M-s g" . consult-git-grep)      ;; Alternatives: consult-grep, consult-ripgrep
   ;; ("M-s f" . consult-find)         ;; Alternatives: consult-locate, my-fdfind
-  ;; ("M-s l" . consult-line)
-  ;; ("M-s m" . consult-multi-occur)
   ;; ("M-s k" . consult-keep-lines)
   ;; ("M-s u" . consult-focus-lines)
-  ;; ;; Other bindings
   ;; ("M-y" . consult-yank-pop)
   ;; ("<help> a" . consult-apropos)
   :init
@@ -851,8 +736,8 @@ library/userland functions"
 
 (use-package embark
   :ensure t
-  :bind
-  ;; ("C-a" . embark-act)
+  :bind(:map minibuffer-local-map
+             ("C-M-e" . embark-act))
   :config
   (setq embark-action-indicator
         (lambda (map)
@@ -895,7 +780,7 @@ library/userland functions"
          (mode apropos-mode help-mode helpful-mode Info-mode Man-mode))))
 
 ;; ----------------------------------------------------------------------
-;; eglot
+;; ccls
 ;; ----------------------------------------------------------------------
 
 (use-package ccls
@@ -903,47 +788,36 @@ library/userland functions"
   :hook ((c-mode c++-mode objc-mode cuda-mode) .
          (lambda () (require 'ccls))))
 
-(use-package eglot
-  :ensure t
-  :config
-  (add-to-list 'eglot-server-programs '((c-mode c++-mode) "ccls"))
-  (add-hook 'c-mode-hook #'eglot-ensure)
-  (add-hook 'python-mode #'eglot-ensure)
-  (add-hook 'c++-mode-hook #'eglot-ensure))
-
 ;; ;; ----------------------------------------------------------------------
 ;; ;; lsp
 ;; ;; ----------------------------------------------------------------------
 
-;; (use-package lsp-mode
-;;   :straight t
-;;   :disabled t
-;; ;;  :commands lsp
-;;   :config
-;;   (setq lsp-auto-guess-root t
-;;         lsp-file-watch-threshold 500
-;;         lsp-auto-configure nil
-;;         lsp-prefer-flymake t)
-;;   :hook ((c-mode c++-mode java-mode python-mode) . lsp))
+(use-package lsp-mode
+  :ensure t
+  :config
+  (setq lsp-auto-guess-root t
+        lsp-file-watch-threshold 500
+        lsp-auto-configure nil
+        lsp-prefer-flymake t)
+  :hook ((c-mode c++-mode java-mode python-mode) . lsp))
 
-;; (use-package lsp-ui
-;;   :straight t
-;;   :disabled t
-;;   :after lsp-mode
-;;   :config
-;;   (setq lsp-ui-doc-enable nil)
-;;   (setq lsp-ui-doc-delay 100)
-;;   (setq lsp-ui-sideline-show-hover nil)
-;;   (setq lsp-ui-doc-include-signature t)
-;;   (add-hook 'lsp-mode-hook 'lsp-ui-mode))
+(use-package lsp-ui
+  :ensure t
+  :after lsp-mode
+  :config
+  (setq lsp-ui-doc-enable nil)
+  (setq lsp-ui-doc-delay 100)
+  (setq lsp-ui-sideline-show-hover nil)
+  (setq lsp-ui-doc-include-signature t)
+  (add-hook 'lsp-mode-hook 'lsp-ui-mode)
+  (lsp-ui-doc-mode -1))
 
-;; (use-package dap-mode
-;;   :straight t
-;;   :disabled t
-;;   :after lsp-mode
-;;   :config
-;;   (dap-mode t)
-;;   (dap-ui-mode t))
+(use-package dap-mode
+  :ensure t
+  :after lsp-mode
+  :config
+  (dap-mode t)
+  (dap-ui-mode t))
 
 ;; ----------------------------------------------------------------------
 ;; magit
@@ -972,6 +846,234 @@ library/userland functions"
 (use-package ediff
   :config
   (set 'ediff-window-setup-function 'ediff-setup-windows-plain))
+
+;; ----------------------------------------------------------------------
+;; org
+;; ----------------------------------------------------------------------
+
+
+(use-package org
+  :ensure t
+  :mode ("\\.org\\'" . org-mode)
+  :bind (("C-c l" . org-store-link)
+         ("C-c C-l" . org-insert-link)
+         ("C-c c" . org-capture)
+         ("C-c a" . org-agenda)
+         ("C-c b" . org-iswitchb)
+         ("C-c C-w" . org-refile))
+  :custom-face
+  (org-document-title ((t (:foreground "#171717" :weight bold :height 1.5))))
+  :config
+  (progn
+    (setq org-directory
+          (cond ((equal system-type 'windows-nt) "c:/Users/edenny/Org")
+                ((equal system-type 'gnu/linux) "/home/edgar/Notes")))
+    (setq org-agenda-files (directory-files-recursively (concat org-directory "/Agenda/") "\.org$"))
+    (setq org-log-done 'time)
+    (setq org-agenda-show-all-dates nil)
+    (setq org-capture-templates
+          `(("i" "Todo [inbox]" entry
+             (file+headline ,(format "%s/%s" org-directory "Inbox.org") "Inbox")
+             "* TODO %i%?")
+            ("w" "Web site" entry
+             (file "")
+             "* %a :website:\n\n%U %?\n\n%:initial")
+            ("M" "mu4e with kill" entry
+             (file+headline ,(format "%s/%s" org-directory "Inbox.org") "Inbox")
+             "* TODO %a %?\nSCHEDULED: %(org-insert-time-stamp (org-read-date nil t \"+0d\")) \n %c \n")
+            ("m" "mu4e" entry
+             (file+headline ,(format "%s/%s" org-directory "Inbox.org") "Inbox")
+             "* TODO %a %?\nSCHEDULED: %(org-insert-time-stamp (org-read-date nil t \"+0d\"))\n")
+            ("T" "Tickler" entry
+             (file+headline ,(format "%s/%s" org-directory "Tickler.org") "Tickler")
+             "* %i%? \n %^t")))
+
+    (setq org-return-follows-link t)
+
+    ;;    (org-catch-invisible-edits 'show)
+
+    ;;    (variable-pitch ((t (:family "Libre Baskerville"))))
+
+    (setq org-outline-path-complete-in-steps nil)
+    (setq org-refile-allow-creating-parent-nodes 'confirm)
+    (setq org-src-fontify-natively t
+          org-edit-src-content-indentation 0
+          org-src-tab-acts-natively t
+          org-src-preserve-indentation t)
+    (setq org-use-speed-commands t)
+
+    (add-to-list 'org-modules 'org-habit t)
+
+    ;; log TODO creation also
+    (setq org-treat-insert-todo-heading-as-state-change t)
+    ;; log into LOGBOOK drawer
+    (setq org-log-into-drawer t)
+
+    ;; show agenda from today rather than Monday
+    (setq org-agenda-start-on-weekday nil)
+
+    (setq org-startup-indented t
+          org-startup-truncated nil
+          org-ellipsis " ▼"
+          ;;          org-pretty-entities t
+          org-hide-emphasis-markers t
+          org-return-follows-link t)
+    (setq org-hide-emphasis-markers t)
+    (setq org-src-fontify-natively t)
+    (setq org-refile-use-outline-path t
+          org-reverse-note-order nil)
+    (setq org-tags-column -90)
+    (setq org-agenda-skip-scheduled-if-deadline-is-shown t)
+    (setq org-agenda-skip-deadline-if-done t)
+    (setq org-agenda-skip-scheduled-if-done t)
+    (setq org-deadline-warning-days 7)
+    (setq org-agenda-ndays 7)
+
+    ;;don't show tasks that are scheduled or have deadlines in the
+    ;;normal todo list
+    (setq org-agenda-todo-ignore-deadlines 'all)
+    (setq org-agenda-todo-ignore-scheduled 'all)
+    ;;sort tasks in order of when they are due and then by priority
+    (setq org-agenda-sorting-strategy
+          '((agenda deadline-up priority-down)
+            (todo priority-down category-keep)
+            (tags priority-down category-keep)
+            (search category-keep)))
+
+    (setq org-priority-faces '((?A . (:background "#F0DFAF" :weight bold))
+                               (?B . (:background "LightSteelBlue"))
+                               (?C . (:background "OliveDrab"))))
+
+    ;; refile
+    (setq org-refile-targets '((nil :maxlevel . 4)
+                               (org-agenda-files :maxlevel . 4)))
+    (setq org-refile-use-outline-path 'file)
+    (setq org-outline-path-complete-in-steps nil)
+    (setq org-refile-allow-creating-parent-nodes 'confirm)
+
+    (setq org-tags-column -90)
+
+    (setq org-agenda-span 14)
+    (setq org-todo-keywords '((sequence "TODO(t)" "IN-PROGRESS(p)" "WAITING(w)" "|" "DONE(d)")))
+    (add-hook 'org-mode-hook (lambda () (setq fill-column 100)))
+    (add-hook 'org-mode-hook 'turn-on-auto-fill)
+
+    (setq org-todo-keyword-faces
+          '(("TODO" . org-warning)
+            ("IN-PROGRESS" . "green4")
+            ("WAITING" . "red")
+            ("COMPLETE" . "blue")))
+
+    (setq org-clock-persist t)
+    (org-clock-persistence-insinuate)
+    (setq org-outline-path-complete-in-steps 't)
+    (setq org-time-clocksum-format '(:hours "%d" :require-hours t :minutes ":%02d" :require-minutes t))
+
+    (org-link-set-parameters
+     "search-view" :follow 'my-search-view-link)
+
+    (defun my-search-view-link (txt)
+      "Display a list of TODOs that match txt"
+      (setq current-prefix-arg 1)
+      (org-search-view (null current-prefix-arg) txt))
+
+    (defun my/hash-word-to-search-view ()
+      "Create search-view link if word starts with a hash."
+      (when (eq major-mode 'org-mode)
+        (with-current-buffer (current-buffer)
+          (save-excursion
+            (goto-char (point-min))
+            (while (re-search-forward "\\\( \\\)\\\(#\\\)\\\(\\\w+\\\|\\\w+\\\s_\\\w+\\\)\\\( \\\|$\\\)" nil t)
+              (let ((txt (match-string 3)))
+                (replace-match (concat " [[search-view:" txt "][#" txt "]] "))))))))
+
+    (add-hook 'before-save-hook 'my/hash-word-to-search-view)
+    (org-babel-do-load-languages 'org-babel-load-languages
+                                 '((emacs-lisp . t)
+                                   (python . t)))))
+
+(use-package org-bullets
+  :ensure t
+  ;;  :commands org-bullets-mode
+  :config
+  (add-hook 'org-mode-hook
+            (lambda ()
+              (org-bullets-mode 1)))
+  (setq org-bullets-bullet-list '("●" "○" "♦" "♢")))
+
+(use-package org-ql
+  :ensure t
+  :after org
+  :commands (org-ql-search org-ql-view org-ql-view-sidebar org-ql-sparse-tree helm-org-ql org-ql-block)
+  )
+
+(use-package org-super-agenda
+  :ensure t
+  :after org
+  :config (org-super-agenda-mode))
+
+(setq org-agenda-custom-commands
+      '(("c" "Super Agenda" agenda
+         (org-super-agenda-mode)
+         ((org-super-agenda-groups
+           '(
+             (:name "Habits"
+                    :habit t)
+             (:name "Today"
+                    :time-grid t
+                    :scheduled today)
+             (:name "Due Today"
+                    :deadline today)
+             (:name "Important"
+                    :priority "A")
+             (:name "Overdue"
+                    :deadline past)
+             (:name "Due soon"
+                    :deadline future)
+             (:name "Waiting"
+                    :todo "WAITING")
+             )))
+         (org-agenda nil "a"))
+        ("n" "Agenda"
+         ((agenda ""
+                  ((org-agenda-overriding-header "Scheduled")))
+          (todo "TODO"
+                ((org-agenda-overriding-header "Unscheduled")
+                 (org-agenda-skip-function
+                  (quote
+                   (org-agenda-skip-entry-if
+                    (quote scheduled)))))))
+         nil nil)))
+
+(use-package org-sidebar
+  :ensure t
+  :after org
+  :commands (org-sidebar-tree-toggle org-sidebar-toggle org-sidebar-ql)
+  :custom (org-sidebar-tree-side 'left))
+
+(setq package-check-signature nil)
+
+(use-package org-roam
+  :ensure t
+  :after org
+  :hook
+  (after-init . org-roam-mode)
+  :custom
+  (org-roam-directory (concat org-directory "/Roam"))
+  :bind (:map org-roam-mode-map
+              (("C-c n l" . org-roam)
+               ("C-c n f" . org-roam-find-file)
+               ("C-c n g" . org-roam-graph))
+              :map org-mode-map
+              (("C-c n i" . org-roam-insert))
+              (("C-c n I" . org-roam-insert-immediate)))
+  :config
+  (setq org-roam-buffer-width 0.4)
+  (setq org-roam-link-title-format "{{%s}}")
+  (setq org-roam-templates
+        '(("default" (:file org-roam--file-name-timestamp-title
+                            :content "#+TITLE: ${title} \n")))))
+
 
 ;; ;; ----------------------------------------------------------------------
 ;; ;; mu4e
@@ -1054,16 +1156,7 @@ library/userland functions"
 ;; ----------------------------------------------------------------------
 
 (use-package multiple-cursors
-  :ensure t
-  :init
-  (progn
-    ;; these need to be defined here - if they're lazily loaded with
-    ;; :bind the key won't work. FIXME: is this true?
-    (global-set-key (kbd "C->") 'mc/mark-next-like-this)
-    (global-set-key (kbd "C-<") 'mc/mark-previous-like-this)
-    (global-set-key (kbd "C-c C-<") 'mc/mark-all-like-this)
-    (global-set-key (kbd "C-S-c C-S-c") 'mc/edit-lines)
-    (global-set-key (kbd "C-'") 'mc-hide-unmatched-lines-mode)))
+  :ensure t)
 
 ;; ----------------------------------------------------------------------
 ;; recentf
@@ -1265,34 +1358,6 @@ library/userland functions"
   )
 
 ;; ----------------------------------------------------------------------
-;; hydras
-;; ----------------------------------------------------------------------
-
-;; TODO: look at evil version
-(use-package multiple-cursors
-  :ensure t
-  :config
-  (defhydra hydra-multiple-cursors (:color red :hint nil)
-    "
-^Up^            ^Down^        ^Other^
-----------------------------------------------
-[_p_]   Next    [_n_]   Next    [_l_] Edit lines
-[_P_]   Skip    [_N_]   Skip    [_a_] Mark all
-[_M-p_] Unmark  [_M-n_] Unmark  [_r_] Mark by regexp
-[_q_] Quit
-"
-    ("l" mc/edit-lines :exit t)
-    ("a" mc/mark-all-like-this :exit t)
-    ("n" mc/mark-next-like-this)
-    ("N" mc/skip-to-next-like-this)
-    ("M-n" mc/unmark-next-like-this)
-    ("p" mc/mark-previous-like-this)
-    ("P" mc/skip-to-previous-like-this)
-    ("M-p" mc/unmark-previous-like-this)
-    ("r" mc/mark-all-in-region-regexp :exit t)
-    ("q" nil :color blue)))
-
-;; ----------------------------------------------------------------------
 ;; functions
 ;; ----------------------------------------------------------------------
 
@@ -1306,6 +1371,12 @@ library/userland functions"
   (interactive)
   (move-end-of-line nil)
   (newline-and-indent))
+
+(defun my/insert-new-line-yank ()
+  (interactive)
+  (move-end-of-line nil)
+  (newline)
+  (yank))
 
 (defun my/next-begin-sexp ()
   (interactive)
@@ -1358,7 +1429,6 @@ library/userland functions"
 (use-package general
   :ensure t)
 
-
 (general-define-key
  :keymaps 'override
 
@@ -1366,6 +1436,7 @@ library/userland functions"
  "H-M-s-y" 'my/copy-line
  "H-M-s-j" 'join-line
  "H-M-s-o" 'my/insert-new-line
+ "H-M-s-p" 'my/insert-new-line-yank
 
  "H-M-s-w" 'forward-symbol
  "H-M-s-b" 'my/backward-symbol
@@ -1383,6 +1454,8 @@ library/userland functions"
 
  "H-M-s-f" 'mark-defun
  "H-M-s-s" 'my/mark-sexp
+
+ "H-M-s-r" 'replace-regexp
 
  "H-M-s-i" 'my/kill-sexp
  "H-M-s-." 'my/next-begin-sexp
@@ -1436,23 +1509,35 @@ library/userland functions"
  ;; "C-M-s-J" 'buf-move-left
  ;; "C-M-S-L" 'buf-move-right
 
- "c"   '(:ignore t :which-key "code")
+ "c"   '(:ignjjore t :which-key "code")
  "c s"     'info-lookup-symbol
  "c u"     'insert-char
  "c y"     'browse-kill-ring
  "c l"     '(:ignore t :which-key "lsp")
- "c l d"   'eglot-find-declaration
- "c l D"   'xref-find-definitions
- "c l R"   'xref-find-references
- "c l i"   'eglot-find-implementation
- "c l t"   'eglot-find-typeDefinition
+ "c l c"   'lsp-describe-session
+ "c l d"   'lsp-find-declaration
+ "c l D"   'lsp-find-definition
+ "c l R"   'lsp-find-references
+ "c l i"   'lsp-find-implementation
+ "c l t"   'lsp-find-type-definition
  "c l s"   'display-local-help
- "c l r"   'eglot-rename
- "c l h"   'eglot-help-at-point
- "c l f"   'eglot-format
- "c l x"   'eglot-code-actions
- "c l M-r" 'eglot-restart
- "c l S"   'eglot-shutdown
+ "c l I"   'lsp-ui-imenu
+ "C l r"   'lsp-rename
+ "c l h"   'lsp-describe-thing-at-point
+ "c l f"   'lsp-format-buffer
+ "c l x"   'lsp-execute-code-action
+ "c l M-r" 'lsp-restart-workspace
+ "c l S"   'lsp-shutdown-workspace
+ "c m" '(:ignore t :which-key "multiple cursors")
+ "c m e"   'mc/edit-lines
+ "c m a"   'mc/mark-all-like-this
+ "c m n"   'mc/mark-next-like-this
+ "c m p"   'mc/mark-previous-like-this
+ "c m N"   'mc/unmark-next-like-this
+ "c m P"   'mc/unmark-previous-like-this
+ "c m s"   'mc/skip-to-next-like-this
+ "c m S"   'mc/skip-to-previous-like-this
+ "c m h"   'mc-hide-unmatched-lines-mode
 
  "k d" 'general-describe-keybindings
 
@@ -1496,7 +1581,8 @@ library/userland functions"
  "s r" 'my-consult-grep
  "s g" 'consult-git-grep
  "s w" 'avy-goto-word-or-subword-1
- "s c" 'avy-goto-char
+ "s s" 'avy-goto-symbol-1
+ "s c" 'avy-goto-char-2
  "s m" 'imenu
 
  "q"   '(:ignore t :which-key "quit")
@@ -1518,6 +1604,7 @@ library/userland functions"
  "j i" 'consult-project-imenu
  "j o" 'consult-multi-occur
  "j g" 'consult-goto-line
+ "j l" 'avy-goto-line
 
  "m"   '(:ignore t :which-key "mark")
  "m d" 'mark-defun
@@ -1561,7 +1648,7 @@ library/userland functions"
  "h S" 'info-lookup-symbol
 
  "o"   '(:ignore t :which-key "org")
- "o m" 'org-mu4e-store-and-capture)
+ "o m") 'org-mu4e-store-and-capture
 
 ;;; Mode Keybindings
 
