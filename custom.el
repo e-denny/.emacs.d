@@ -3,30 +3,12 @@
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
- '(flyspell-abbrev-p t nil nil "Customized with use-package flyspell")
- '(flyspell-issue-message-flag nil nil nil "Customized with use-package flyspell")
- '(flyspell-issue-welcome-flag nil nil nil "Customized with use-package flyspell")
- '(flyspell-use-global-abbrev-table-p t nil nil "Customized with use-package flyspell")
- '(git-gutter:added-sign "+" nil nil "Customized with use-package git-gutter")
- '(git-gutter:deleted-sign "-" nil nil "Customized with use-package git-gutter")
- '(git-gutter:modified-sign ">" nil nil "Customized with use-package git-gutter")
- '(global-highlight-parentheses-mode t)
- '(highlight-parentheses-background-colors
-   '("dodger blue" "orange red" "sea green" "sienna" "medium slate blue" "VioletRed1"))
- '(highlight-parentheses-colors '("white" "white" "white" "white" "white" "white"))
+ '(org-agenda-files '("/home/edgar/Notes/Agenda/Inbox.org"))
+ '(org-download-backend "curl \"%s\" -o \"%s\"")
  '(package-selected-packages
-   '(good-scroll aggressive-indent org-roam yasnippet-snippets company-prescient embark embark-consult marginalia prescient selectrum selectrum-prescient consult yasnippet winum which-key vterm vscode-icon use-package treemacs-projectile treemacs-magit sx smex smart-mode-line-powerline-theme shrface rainbow-mode rainbow-delimiters pdf-tools paredit paradox org-sidebar org-gcal org-bullets multiple-cursors modus-themes macrostep lsp-ui leuven-theme ivy-hydra highlight-parentheses helm-xref helm-swoop helm-rg helm-projectile helm-org-rifle helm-org helm-ls-git helm-descbinds git-gutter general free-keys flycheck eyebrowse exwm evil-leader eshell-git-prompt elisp-slime-nav elfeed-goodies dumb-jump doom-modeline diredfl dired-sidebar dired-narrow dired-git-info dimmer diminish dashboard dap-mode counsel-projectile company-lsp company-box ccls buffer-move browse-kill-ring beacon all-the-icons-dired))
- '(shr-max-width 100)
- '(shr-use-fonts nil)
- '(shr-width 90)
- '(smtpmail-debug-info t)
- '(use-package-compute-statistics t)
- '(warning-suppress-log-types
-   '(((flymake nil))
-     ((flymake nil))
-     (use-package)
-     (use-package)))
- '(warning-suppress-types '(((flymake nil)) (use-package) (use-package))))
+   '(org-download org-web-tools zenburn-theme yasnippet-snippets winum which-key vterm vscode-icon use-package treemacs-projectile treemacs-magit sx svg-tag-mode smartparens smart-mode-line-powerline-theme shrface selectrum-prescient rainbow-mode rainbow-delimiters popwin pdf-tools paredit org-sidebar org-roam org-gcal org-bullets olivetti noflet multiple-cursors modus-themes marginalia macrostep lsp-ui leuven-theme highlight-quoted highlight-parentheses helpful goto-chg git-gutter general free-keys eyebrowse exwm embark-consult elisp-slime-nav elfeed dumb-jump doom-modeline diredfl dired-sidebar dired-narrow dired-git-info dimmer diminish dashboard dap-mode company-prescient company-lsp company-box ccls buffer-move browse-kill-ring beacon async apropospriate-theme all-the-icons-dired aggressive-indent ace-jump-mode))
+ '(warning-suppress-log-types '((comp) (comp)))
+ '(warning-suppress-types '((comp))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
@@ -35,4 +17,6 @@
  '(git-gutter:added ((t (:background "#84edb9" :foreground "#2f2f2f"))))
  '(git-gutter:deleted ((t (:background "#d75f5f" :foreground "#2f2f2f"))))
  '(git-gutter:modified ((t (:background "#c0b18b" :foreground "#2f2f2f"))))
- '(org-document-title ((t (:foreground "#171717" :weight bold :height 1.5)))))
+ '(org-document-title ((t (:foreground "#171717" :weight bold :height 1.5))))
+ '(org-scheduled-previously ((t (:foreground "white smoke"))))
+ '(org-tag ((t (:background "dim gray" :foreground "#e5cfef")))))

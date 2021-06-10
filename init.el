@@ -58,6 +58,13 @@
 
 ;; ----------------------------------------------------------------------
 
+(let* ((my-lisp-dir "~/.emacs.d/site-lisp/")
+       (default-directory my-lisp-dir)
+       (orig-load-path load-path))
+  (setq load-path (cons my-lisp-dir nil))
+  (normal-top-level-add-subdirs-to-load-path)
+  (nconc load-path orig-load-path))
+
 (setq custom-file "~/.emacs.d/custom.el")
 (setq custom-safe-themes t)
 (load custom-file)
@@ -70,7 +77,6 @@
 (diminish 'auto-revert-mode "")
 (diminish 'isearch-mode "?")
 (diminish 'abbrev-mode "")
-(diminish 'org-roam-mode "")
 
 ;; ----------------------------------------------------------------------
 ;; defaults
@@ -89,8 +95,10 @@
 (set-face-attribute 'default nil
                     :family "Hack"
                     :height 115
-                    :weight 'normal
+                    :weight 'medium
                     :width 'normal)
+
+(set-face-attribute 'variable-pitch nil :font "Open Sans" :height 115)
 
 (blink-cursor-mode -1)
 (scroll-bar-mode -1)
@@ -113,8 +121,8 @@
 
 (global-hl-line-mode +1)
 
-;; show line numbers for program buffers
-(add-hook 'prog-mode-hook 'display-line-numbers-mode)
+;; TODO: put in a toggle hydra - show line numbers for program buffers
+;; (add-hook 'prog-mode-hook 'display-line-numbers-mode)
 
 ;; start flymake mode
 (add-hook 'prog-mode-hook 'flymake-mode)
@@ -215,16 +223,6 @@
   :hook (company-mode . company-box-mode))
 
 ;; ----------------------------------------------------------------------
-;; good-scroll
-;; ----------------------------------------------------------------------
-
-(use-package good-scroll
-  :ensure t
-  :disabled t
-  :config
-  (good-scroll-mode 1))
-
-;; ----------------------------------------------------------------------
 ;; dired
 ;; ----------------------------------------------------------------------
 
@@ -232,7 +230,7 @@
 (add-hook 'dired-mode-hook 'auto-revert-mode)
 
 (use-package dired
-;;  :straight (:type built-in)
+  ;;  :straight (:type built-in)
   :commands (dired dired-jump dired-jump-other-window)
   :config
   (setq dired-listing-switches "-laGh1v --group-directories-first")
@@ -312,6 +310,7 @@
 (defvar +emacs-lisp-enable-extra-fontification t
   "If non-nil, highlight special forms, and defined functions and variables.")
 
+;; from doom emacs
 (defun +emacs-lisp-highlight-vars-and-faces (end)
   "Match defined variables and functions to END.
 Functions are differentiated into special forms, built-in functions and
@@ -385,8 +384,7 @@ library/userland functions"
                               (insert "\n" (pp-to-string arg)))
                             (insert ")"))
                           (goto-char (point-min))
-                          (indent-pp-sexp))))
-  )
+                          (indent-pp-sexp)))))
 
 
 (use-package eldoc
@@ -410,6 +408,15 @@ library/userland functions"
 (use-package macrostep
   :ensure t)
 
+(use-package smartparens
+  :ensure t
+  :config
+  (add-hook 'emacs-lisp-mode-hook #'smartparens-mode)
+  (add-hook 'lisp-interaction-mode-hook #'smartparens-mode)
+  (add-hook 'lisp-mode-hook #'smartparens-mode)
+  (add-hook 'ielm-mode-hook #'smartparens-mode)
+  (add-hook 'eval-expression-minibuffer-setup-hook #'smartparens-mode))
+
 (use-package paredit
   :ensure t
   :diminish paredit-mode
@@ -418,7 +425,8 @@ library/userland functions"
   (add-hook 'lisp-interaction-mode-hook #'paredit-mode)
   (add-hook 'lisp-mode-hook #'paredit-mode)
   (add-hook 'ielm-mode-hook #'paredit-mode)
-  (add-hook 'eval-expression-minibuffer-setup-hook #'paredit-mode))
+  (add-hook 'eval-expression-minibuffer-setup-hook #'paredit-mode)
+  )
 
 (use-package highlight-parentheses
   :ensure t
@@ -621,6 +629,8 @@ library/userland functions"
         ("Chromium" . browse-url-chromium)
         ("EWW" . eww-browse-url)))
 
+(setq browse-url-browser-function #'eww-browse-url)
+
 ;; (defun my-browse-url (&rest args)
 ;;   "Select the prefered browser from a helm menu before opening the URL."
 ;;   (interactive)
@@ -706,15 +716,9 @@ library/userland functions"
       (consult-find dir)))
   (setq register-preview-delay 0
         register-preview-function #'consult-register-preview)
-  (advice-add #'register-preview :around
-              (lambda (fun buffer &optional show-empty)
-                (let ((register-alist (seq-sort #'car-less-than-car register-alist)))
-                  (funcall fun buffer show-empty))
-                (when-let (win (get-buffer-window buffer))
-                  (with-selected-window win
-                    (setq-local mode-line-format nil)
-                    (setq-local window-min-height 1)
-                    (fit-window-to-buffer)))))
+  (advice-add #'register-preview :override #'consult-register-window)
+  (setq xref-show-xrefs-function #'consult-xref
+        xref-show-definitions-function #'consult-xref)
   :config
   (setq consult-project-root-function #'vc-root-dir)
   (setq consult-narrow-key "<")
@@ -743,7 +747,7 @@ library/userland functions"
         (lambda (map)
           (which-key--show-keymap "Embark" map nil nil 'no-paging)
           #'which-key--hide-popup-ignore-command)
-        embark-become-indator embark-action-indicator))
+        embark-become-indicator embark-action-indicator))
 
 (use-package embark-consult
   :ensure t
@@ -798,6 +802,10 @@ library/userland functions"
   (setq lsp-auto-guess-root t
         lsp-file-watch-threshold 500
         lsp-auto-configure nil
+        lsp-eldoc-render-all t
+        lsp-enable-xref t
+        lsp-enable-symbol-highlighting t
+        lsp-semantic-tokens-enable t
         lsp-prefer-flymake t)
   :hook ((c-mode c++-mode java-mode python-mode) . lsp))
 
@@ -807,7 +815,9 @@ library/userland functions"
   :config
   (setq lsp-ui-doc-enable nil)
   (setq lsp-ui-doc-delay 100)
-  (setq lsp-ui-sideline-show-hover nil)
+  (setq lsp-ui-sideline-show-hover nil
+        lsp-ui-peek-always-show t)
+
   (setq lsp-ui-doc-include-signature t)
   (add-hook 'lsp-mode-hook 'lsp-ui-mode)
   (lsp-ui-doc-mode -1))
@@ -851,6 +861,10 @@ library/userland functions"
 ;; org
 ;; ----------------------------------------------------------------------
 
+(use-package olivetti
+  :ensure t
+  :config
+  (add-hook 'text-mode 'olivetti-mode))
 
 (use-package org
   :ensure t
@@ -865,9 +879,7 @@ library/userland functions"
   (org-document-title ((t (:foreground "#171717" :weight bold :height 1.5))))
   :config
   (progn
-    (setq org-directory
-          (cond ((equal system-type 'windows-nt) "c:/Users/edenny/Org")
-                ((equal system-type 'gnu/linux) "/home/edgar/Notes")))
+    (setq org-directory "/home/edgar/Notes")
     (setq org-agenda-files (directory-files-recursively (concat org-directory "/Agenda/") "\.org$"))
     (setq org-log-done 'time)
     (setq org-agenda-show-all-dates nil)
@@ -914,15 +926,14 @@ library/userland functions"
 
     (setq org-startup-indented t
           org-startup-truncated nil
-          org-ellipsis " ▼"
-          ;;          org-pretty-entities t
-          org-hide-emphasis-markers t
+          org-ellipsis " …"
           org-return-follows-link t)
     (setq org-hide-emphasis-markers t)
+    (setq org-hide-leading-stars t)
     (setq org-src-fontify-natively t)
     (setq org-refile-use-outline-path t
           org-reverse-note-order nil)
-    (setq org-tags-column -90)
+    (setq org-tags-column 70)
     (setq org-agenda-skip-scheduled-if-deadline-is-shown t)
     (setq org-agenda-skip-deadline-if-done t)
     (setq org-agenda-skip-scheduled-if-done t)
@@ -940,10 +951,6 @@ library/userland functions"
             (tags priority-down category-keep)
             (search category-keep)))
 
-    (setq org-priority-faces '((?A . (:background "#F0DFAF" :weight bold))
-                               (?B . (:background "LightSteelBlue"))
-                               (?C . (:background "OliveDrab"))))
-
     ;; refile
     (setq org-refile-targets '((nil :maxlevel . 4)
                                (org-agenda-files :maxlevel . 4)))
@@ -951,23 +958,23 @@ library/userland functions"
     (setq org-outline-path-complete-in-steps nil)
     (setq org-refile-allow-creating-parent-nodes 'confirm)
 
-    (setq org-tags-column -90)
+    (setq org-tags-column 0)
+    (setq org-agenda-tags-column 0)
 
     (setq org-agenda-span 14)
-    (setq org-todo-keywords '((sequence "TODO(t)" "IN-PROGRESS(p)" "WAITING(w)" "|" "DONE(d)")))
+    (setq org-todo-keywords '((sequence "TODO(t)" "IN-PROGRESS(p)" "NOTE(n)" "WAITING(w)" "|" "DONE(d)")))
     (add-hook 'org-mode-hook (lambda () (setq fill-column 100)))
     (add-hook 'org-mode-hook 'turn-on-auto-fill)
-
-    (setq org-todo-keyword-faces
-          '(("TODO" . org-warning)
-            ("IN-PROGRESS" . "green4")
-            ("WAITING" . "red")
-            ("COMPLETE" . "blue")))
+    (add-hook 'org-mode-hook 'org-indent-mode)
 
     (setq org-clock-persist t)
     (org-clock-persistence-insinuate)
     (setq org-outline-path-complete-in-steps 't)
     (setq org-time-clocksum-format '(:hours "%d" :require-hours t :minutes ":%02d" :require-minutes t))
+
+    (org-babel-do-load-languages 'org-babel-load-languages
+                                 '((emacs-lisp . t)
+                                   (python . t)))
 
     (org-link-set-parameters
      "search-view" :follow 'my-search-view-link)
@@ -988,18 +995,53 @@ library/userland functions"
                 (replace-match (concat " [[search-view:" txt "][#" txt "]] "))))))))
 
     (add-hook 'before-save-hook 'my/hash-word-to-search-view)
-    (org-babel-do-load-languages 'org-babel-load-languages
-                                 '((emacs-lisp . t)
-                                   (python . t)))))
 
-(use-package org-bullets
-  :ensure t
-  ;;  :commands org-bullets-mode
-  :config
-  (add-hook 'org-mode-hook
-            (lambda ()
-              (org-bullets-mode 1)))
-  (setq org-bullets-bullet-list '("●" "○" "♦" "♢")))
+    (defun my/org-setup ()
+      (olivetti-mode 1)
+      (set-fringe-style 0)
+      (setq olivetti-body-width 100))
+
+    (defun my/org-agenda-setup ()
+      (olivetti-mode 1)
+      (setq org-agenda-files (directory-files-recursively (concat org-directory "/Agenda/") "\.org$"))
+      (setq olivetti-body-width 100))
+
+    (setq org-todo-keyword-faces
+          '(("TODO" . (foreground "black" :background "brown2" :weight bold
+                                  :overline "white"
+                                  :box (:line-width (6 . 0) :style flat-button)))
+            ("IN-PROGRESS" . (foreground "black" :background "SeaGreen" :weight bold
+                                         :overline "white"
+                                         :box (:line-width (6 . 1) :style flat-button)))
+            ("NOTE" . (foreground "black" :background "tan4" :weight bold
+                                  :overline "white"
+                                  :box (:line-width (6 . 1) :color ,orange-1 :style flat-button)))
+            ("WAITING" . (foreground "black" :background "orange3" :weight bold
+                                     :overline "white"
+                                     :box (:line-width (6 . 1) :style flat-button)))
+            ("DONE" . (foreground "black" :background "DimGrey" :weight bold
+                                  :overline "white"
+                                  :box (:line-width (6 . 1) :style flat-button)))))
+
+    (setq org-priority-faces '((?A . (:background "DimGrey" :weight bold))
+                               (?B . (:background "DimGrey" :weight bold))
+                               (?C . (:background "DimGrey" :weight bold))))
+
+
+
+    (add-hook 'org-mode-hook 'my/org-setup)
+    (add-hook 'org-agenda-mode-hook 'my/org-agenda-setup)
+
+    ))
+
+;; (use-package org-bullets
+;;   :ensure t
+;;   ;;  :commands org-bullets-mode
+;;   :config
+;;   (add-hook 'org-mode-hook
+;;             (lambda ()
+;;               (org-bullets-mode 1)))
+;;   (setq org-bullets-bullet-list '("●" "○" "■" "□")))
 
 (use-package org-ql
   :ensure t
@@ -1011,6 +1053,20 @@ library/userland functions"
   :ensure t
   :after org
   :config (org-super-agenda-mode))
+
+
+(use-package svg-tag-mode
+  :ensure t
+  :config
+  (defface svg-tag-todo-face
+    '((t :foreground "red" :background "green"
+         :family "Hack" :weight normal :height 115))
+    "Face for todo note" :group nil)
+  (setq svg-tag-todo (svg-tag-make "TODO" 'svg-tag-todo-face 1 0 1))
+  (setq svg-tag-tags
+        '(("TODO" . svg-tag-todo)))
+  (svg-tag-mode 1)
+  )
 
 (setq org-agenda-custom-commands
       '(("c" "Super Agenda" agenda
@@ -1055,9 +1111,10 @@ library/userland functions"
 
 (use-package org-roam
   :ensure t
+  :diminish org-roam-mode
   :after org
   :hook
-  (after-init . org-roam-mode)
+  (org-mode . org-roam-mode)
   :custom
   (org-roam-directory (concat org-directory "/Roam"))
   :bind (:map org-roam-mode-map
@@ -1074,6 +1131,37 @@ library/userland functions"
         '(("default" (:file org-roam--file-name-timestamp-title
                             :content "#+TITLE: ${title} \n")))))
 
+;; download web pages to org
+(use-package org-web-tools
+  :ensure t)
+
+;; drag and drop images to org
+(use-package org-download
+  :ensure t
+  :config
+  (setq-default org-download-image-dir "~/Notes/Roam/images")
+  (add-hook 'dired-mode-hook 'org-download-enable))
+
+;; ----------------------------------------------------------------------
+;; pdf-tools
+;; ----------------------------------------------------------------------
+
+(use-package pdf-tools
+  :ensure t
+  :pin manual
+  :config
+  (pdf-tools-install)
+  (setq-default pdf-view-display-size 'fit-width)
+  (define-key pdf-view-mode-map (kbd "C-s") 'isearch-forward)
+  :custom
+  (pdf-annot-activate-created-annotations t "automatically annotate highlights"))
+
+(setq TeX-view-program-selection '((output-pdf "PDF Tools"))
+      TeX-view-program-list '(("PDF Tools" TeX-pdf-tools-sync-view))
+      TeX-source-correlate-start-server t)
+
+(add-hook 'TeX-after-compilation-finished-functions
+          #'TeX-revert-document-buffer)
 
 ;; ;; ----------------------------------------------------------------------
 ;; ;; mu4e
@@ -1210,28 +1298,14 @@ library/userland functions"
 
 (add-hook 'flyspell-mode-hook 'flyspell-buffer) ; show misspelled
 
-(with-eval-after-load 'hydra
-  (defhydra hydra-spelling (:color blue)
-    "
-  ^
-  ^Spelling^          ^Errors^            ^Checker^
-  ^────────^──────────^──────^────────────^───────^───────
-  _q_ quit            _<_ previous        _c_ correction
-  ^^                  _>_ next            _d_ dictionary
-  ^^                  _f_ check           _m_ mode
-  ^^                  ^^                  ^^
-  "
-    ("q" nil)
-    ("<" flyspell-correct-previous :color pink)
-    (">" flyspell-correct-next :color pink)
-    ("c" ispell)
-    ("d" ispell-change-dictionary)
-    ("f" flyspell-buffer :color pink)
-    ("m" flyspell-mode)))
-
 ;; ----------------------------------------------------------------------
 ;; theme
 ;; ----------------------------------------------------------------------
+
+(use-package rainbow-mode
+  :ensure t
+  :config
+  (rainbow-mode 1))
 
 (use-package modus-themes
   :ensure t
@@ -1247,7 +1321,7 @@ library/userland functions"
   (setq modus-themes-syntax 'alt-syntax-yellow-comments)
   (modus-themes-load-themes)
   :config
-  (modus-themes-load-vivendi))
+  (modus-themes-load-operandi))
 
 ;; ----------------------------------------------------------------------
 ;; treemacs
@@ -1423,6 +1497,235 @@ library/userland functions"
     (cons beg end)))
 
 ;; ----------------------------------------------------------------------
+;; hydras
+;; ----------------------------------------------------------------------
+
+(with-eval-after-load 'hydra
+  (defhydra hydra-spelling (:color blue)
+    "
+  ^Spelling^        ^Errors^            ^Checker^
+  ^────────^────────^──────^────────────^───────^───────
+  [_q_] quit        [_<_] previous      [_c_] correction
+  ^^                [_>_] next          [_d_] dictionary
+  ^^                [_f_] check         [_m_] mode
+  "
+    ("q" nil)
+    ("<" flyspell-correct-previous :color pink)
+    (">" flyspell-correct-next :color pink)
+    ("c" ispell)
+    ("d" ispell-change-dictionary)
+    ("f" flyspell-buffer :color pink)
+    ("m" flyspell-mode))
+
+  (defhydra hydra-dired (:hint nil :color pink)
+    "
+[_+_] mkdir         [_v_] view       [_m_] mark           [_(_] details    [_i_] insert-subdir  | wdired
+[_C_] copy          [_O_] view other [_U_] unmark all     [_)_] omit-mode  [_$_] hide-subdir    | C-x C-q : edit
+[_D_] delete        [_o_] open other [_u_] unmark         [_l_] redisplay  [_w_] kill-subdir    | C-c C-c : commit
+[_R_] rename        [_M_] chmod      [_t_] toggle         [_g_] revert buf [_e_] ediff          | C-c ESC : abort
+[_Y_] rel symlink   [_G_] chgrp      [_E_] extension mark [_s_] sort       [_=_] pdiff
+[_S_] symlink       ^ ^              [_F_] find marked    [_._] exit hydra [_y_] flyspell
+[_r_] rsync         ^ ^              ^ ^                   ^ ^             [_?_] summary
+[_z_] compress-file [_A_] find regexp
+[_Z_] compress      [_Q_] repl regexp
+"
+    ("y" dired-do-ispell)
+    ("(" dired-hide-details-mode)
+    (")" dired-omit-mode)
+    ("+" dired-create-directory)
+    ("=" diredp-ediff)         ;; smart diff
+    ("?" dired-summary)
+    ("$" diredp-hide-subdir-nomove)
+    ("A" dired-do-find-regexp)
+    ("C" dired-do-copy)        ;; Copy all marked files
+    ("D" dired-do-delete)
+    ("E" dired-mark-extension)
+    ("e" dired-ediff-files)
+    ("F" dired-do-find-marked-files)
+    ("G" dired-do-chgrp)
+    ("g" revert-buffer)        ;; read all directories again (refresh)
+    ("i" dired-maybe-insert-subdir)
+    ("l" dired-do-redisplay)   ;; relist the marked or singel directory
+    ("M" dired-do-chmod)
+    ("m" dired-mark)
+    ("O" dired-display-file)
+    ("o" dired-find-file-other-window)
+    ("Q" dired-do-find-regexp-and-replace)
+    ("R" dired-do-rename)
+    ("r" dired-do-rsynch)
+    ("S" dired-do-symlink)
+    ("s" dired-sort-toggle-or-edit)
+    ("t" dired-toggle-marks)
+    ("U" dired-unmark-all-marks)
+    ("u" dired-unmark)
+    ("v" dired-view-file)      ;; q to exit, s to search, = gets line #
+    ("w" dired-kill-subdir)
+    ("Y" dired-do-relsymlink)
+    ("z" diredp-compress-this-file)
+    ("Z" dired-do-compress)
+    ("q" nil)
+    ("." nil :color blue))
+
+  (define-key dired-mode-map "." 'hydra-dired/body)
+
+  (defhydra hydra-smartparens (:hint nil)
+    "
+ Moving^^^^                    Slurp & Barf^^  Wrapping^^      Sexp juggling^^^^            Destructive
+───────────────────────────────────────────────────────────────────────────────────────────────────────
+ [_a_] beginning [_n_] down    [_h_] bw slurp [_R_] rewrap     [_S_] split  [_t_] transpose [_c_] change inner [_w_] copy
+ [_e_] end       [_N_] bw down [_H_] bw barf  [_u_] unwrap     [_s_] splice [_A_] absorb    [_C_] change outer
+ [_f_] forward   [_p_] up      [_l_] slurp    [_U_] bw unwrap  [_r_] raise  [_E_] emit      [_k_] kill
+ [_b_] backward  [_P_] bw up   [_L_] barf     [_(__{__[_] wrap     [_j_] join   [_o_] convolute [_K_] bw kill      [_._] quit"
+    ;; Moving
+    ("a" sp-beginning-of-sexp)
+    ("e" sp-end-of-sexp)
+    ("f" sp-forward-sexp)
+    ("b" sp-backward-sexp)
+    ("n" sp-down-sexp)
+    ("N" sp-backward-down-sexp)
+    ("p" sp-up-sexp)
+    ("P" sp-backward-up-sexp)
+
+    ;; Slurping & barfing
+    ("h" sp-backward-slurp-sexp)
+    ("H" sp-backward-barf-sexp)
+    ("l" sp-forward-slurp-sexp)
+    ("L" sp-forward-barf-sexp)
+
+    ;; Wrapping
+    ("R" sp-rewrap-sexp)
+    ("u" sp-unwrap-sexp)
+    ("U" sp-backward-unwrap-sexp)
+    ("(" sp-wrap-round)
+    ("{" sp-wrap-curly)
+    ("[" sp-wrap-square)
+
+    ;; Sexp juggling
+    ("S" sp-split-sexp)
+    ("s" sp-splice-sexp)
+    ("r" sp-raise-sexp)
+    ("j" sp-join-sexp)
+    ("t" sp-transpose-sexp)
+    ("A" sp-absorb-sexp)
+    ("E" sp-emit-sexp)
+    ("o" sp-convolute-sexp)
+
+    ;; Destructive editing
+    ("c" sp-change-inner :exit t)
+    ("C" sp-change-enclosing :exit t)
+    ("k" sp-kill-sexp)
+    ("K" sp-backward-kill-sexp)
+    ("w" sp-copy-sexp)
+
+    ("q" nil)
+    ("." nil))
+
+  (defhydra hydra-info (:hint nil)
+    "
+  Info-mode:
+  [_j_] forward    [_l_] last      [_u_] up          [_f_] follow reference  [_T_] TOC
+  [_k_] backward   [_r_] return    [_m_] menu        [_i_] index             [_d_] directory
+  [_n_] nex        [_H_] history   [_g_] goto        [_,_] next index item   [_c_] copy node name
+  [_p_] prev       [_<_] top       [_b_] beginning   [_I_] virtual index     [_C_] clone buffer
+  [_s_] search     [_>_] final     [_e_] end         ^^                      [_a_] apropos
+
+  [_1_] .. [_9_] Pick first .. ninth item in the node's menu.
+"
+
+    ("j"   Info-forward-node)
+    ("k"   Info-backward-node)
+    ("n"   Info-next)
+    ("p"   Info-prev)
+    ("s"   Info-search)
+    ("S"   Info-search-case-sensitively)
+
+    ("l"   Info-history-back)
+    ("r"   Info-history-forward)
+    ("H"   Info-history)
+    ("t"   Info-top-node)
+    ("<"   Info-top-node)
+    (">"   Info-final-node)
+
+    ("u"   Info-up)
+    ("^"   Info-up)
+    ("m"   Info-menu)
+    ("g"   Info-goto-node)
+    ("b"   beginning-of-buffer)
+    ("e"   end-of-buffer)
+
+    ("f"   Info-follow-reference)
+    ("i"   Info-index)
+    (","   Info-index-next)
+    ("I"   Info-virtual-index)
+
+    ("T"   Info-toc)
+    ("d"   Info-directory)
+    ("c"   Info-copy-current-node-name)
+    ("C"   clone-buffer)
+    ("a"   info-apropos)
+
+    ("1"   Info-nth-menu-item)
+    ("2"   Info-nth-menu-item)
+    ("3"   Info-nth-menu-item)
+    ("4"   Info-nth-menu-item)
+    ("5"   Info-nth-menu-item)
+    ("6"   Info-nth-menu-item)
+    ("7"   Info-nth-menu-item)
+    ("8"   Info-nth-menu-item)
+    ("9"   Info-nth-menu-item)
+
+    ("?"   Info-summary "Info summary")
+    ("h"   Info-help "Info help")
+    ("q"   Info-exit "Info exit")
+    ("." nil "cancel" :color blue))
+
+  (define-key Info-mode-map "." 'hydra-info/body)
+
+  (defhydra hydra-lsp (:exit t :hint nil)
+    "
+ Buffer^^               Server^^                   Symbol
+-------------------------------------------------------------------------------------
+ [_f_] format           [_M-r_] restart            [_d_] declaration  [_i_] implementation  [_o_] documentation
+ [_m_] imenu            [_S_]   shutdown           [_D_] definition   [_t_] type            [_r_] rename
+ [_x_] execute action   [_M-s_] describe session   [_R_] references   [_s_] signature"
+    ("d" lsp-find-declaration)
+    ("D" lsp-ui-peek-find-definitions)
+    ("R" lsp-ui-peek-find-references)
+    ("i" lsp-ui-peek-find-implementation)
+    ("t" lsp-find-type-definition)
+    ("s" lsp-signature-help)
+    ("o" lsp-describe-thing-at-point)
+    ("r" lsp-rename)
+
+    ("f" lsp-format-buffer)
+    ("m" lsp-ui-imenu)
+    ("x" lsp-execute-code-action)
+
+    ("M-s" lsp-describe-session)
+    ("M-r" lsp-restart-workspace)
+    ("S" lsp-shutdown-workspace))
+
+  (defhydra hydra-next-error
+    (global-map "C-x")
+    "
+Compilation errors:
+_j_: next error        _h_: first error    _q_uit
+_k_: previous error    _l_: last error
+"
+    ("`" next-error     nil)
+    ("j" next-error     nil :bind nil)
+    ("k" previous-error nil :bind nil)
+    ("h" first-error    nil :bind nil)
+    ("l" (condition-case err
+             (while t
+               (next-error))
+           (user-error nil))
+     nil :bind nil)
+    ("q" nil            nil :color blue))
+
+  )
+
+;; ----------------------------------------------------------------------
 ;; keybindings
 ;; ----------------------------------------------------------------------
 
@@ -1437,6 +1740,7 @@ library/userland functions"
  "H-M-s-j" 'join-line
  "H-M-s-o" 'my/insert-new-line
  "H-M-s-p" 'my/insert-new-line-yank
+ "H-M-s-;" 'comment-line
 
  "H-M-s-w" 'forward-symbol
  "H-M-s-b" 'my/backward-symbol
@@ -1448,6 +1752,7 @@ library/userland functions"
  "H-M-s-x" 'kill-region
  "H-M-s-v" 'yank
  "H-M-s-z" 'undo
+ "H-M-s-u" 'undo
 
  "H-M-s-k" 'kill-word
  "H-M-s-W" 'backward-kill-word
@@ -1516,8 +1821,8 @@ library/userland functions"
  "c l"     '(:ignore t :which-key "lsp")
  "c l c"   'lsp-describe-session
  "c l d"   'lsp-find-declaration
- "c l D"   'lsp-find-definition
- "c l R"   'lsp-find-references
+ "c l D"   'xref-find-definitions
+ "c l R"   'xref-find-references
  "c l i"   'lsp-find-implementation
  "c l t"   'lsp-find-type-definition
  "c l s"   'display-local-help
@@ -1648,7 +1953,12 @@ library/userland functions"
  "h S" 'info-lookup-symbol
 
  "o"   '(:ignore t :which-key "org")
- "o m") 'org-mu4e-store-and-capture
+ "o m" 'org-mu4e-store-and-capture
+ "o i" 'org-download-image
+ "o w" 'org-web-tools-insert-web-page-as-entry
+ "o u" 'org-web-tools-insert-link-for-url
+ "o l" 'org-insert-link
+ )
 
 ;;; Mode Keybindings
 
