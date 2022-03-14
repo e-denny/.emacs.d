@@ -8,7 +8,7 @@
            (require 'rainbow-mode nil t)
            (rainbow-mode 1))))
  '(package-selected-packages
-   '(org-journal company-quickhelp quelpa-use-package quelpa general yasnippet-snippets yasnippet buffer-move dimmer winum free-keys which-key vterm treemacs-magit modus-themes rainbow-mode multiple-cursors pdf-tools org-download org-web-tools org-ref org-sidebar org-ql olivetti git-gutter magit dap-mode lsp-ui ccls helpful hydra embark-consult embark consult marginalia orderless vertico all-the-icons shrface sly-repl-ansi-color sly aggressive-indent highlight-parentheses smartparens macrostep elisp-slime-nav highlight-quoted info-colors dired-git-info diredfl dired-sidebar dired-narrow dired-subtree company psession browse-kill-ring avy diminish use-package))
+   '(:project elisp-mode lisp files window all-the-icons-completion kind-icon corfu org-journal company-quickhelp quelpa-use-package quelpa general yasnippet-snippets yasnippet buffer-move dimmer winum free-keys which-key vterm treemacs-magit modus-themes rainbow-mode multiple-cursors pdf-tools org-download org-web-tools org-ref org-sidebar org-ql olivetti git-gutter magit dap-mode lsp-ui ccls helpful hydra embark-consult embark consult marginalia orderless vertico all-the-icons shrface sly-repl-ansi-color sly aggressive-indent highlight-parentheses smartparens macrostep elisp-slime-nav highlight-quoted info-colors dired-git-info diredfl dired-sidebar dired-narrow dired-subtree company psession browse-kill-ring avy diminish use-package))
  '(warning-suppress-log-types '((comp))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
