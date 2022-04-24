@@ -80,6 +80,21 @@
 (diminish 'abbrev-mode "")
 
 ;; ----------------------------------------------------------------------
+;; general
+;; ----------------------------------------------------------------------
+
+(use-package general
+  :config
+  (general-create-definer general-spc
+    :states 'normal
+    :keymaps 'override
+    :prefix "SPC")
+  (general-create-definer general-spc-m
+    ;; local leader
+    :prefix "SPC m")
+  )
+
+;; ----------------------------------------------------------------------
 ;; defaults
 ;; ----------------------------------------------------------------------
 
@@ -111,8 +126,13 @@
   (setq ring-bell-function 'ignore)
   (setq sentence-end-double-space nil)
 
+  (put 'downcase-region 'disabled nil)
+  (put 'dired-find-alternate-file 'disabled nil)
+
   ;;kill running processes without confirmation on Emacs exit
   (setq confirm-kill-processes nil)
+
+  ;;  (define-key global-map "s-b" '("buffer-prefix" . nil))
 
   (set-fringe-mode '(8 . 0))
 
@@ -142,6 +162,14 @@
   ;; If a popup does happen, don't resize windows to be equal-sized
   (setq even-window-sizes nil)
 
+  (setq window-divider-default-right-width 12)
+  (setq window-divider-default-bottom-width 12)
+  (setq window-divider-default-places t)
+  (window-divider-mode 1)
+
+  (setq default-frame-alist
+        (append (list '(internal-border-width . 12))))
+
   ;; smooth scrolling
   (setq scroll-margin 3
         scroll-conservatively 100
@@ -169,9 +197,13 @@
   :hook ((prog-mode . flymake-mode)
          (before-save . whitespace-cleanup)
          (text-mode . turn-on-visual-line-mode))
-  :bind (("s-e b" . eval-buffer)
-         ("s-e r" . eval-region)
-         ("s-b k" . kill-buffer))
+
+  :general
+  (general-spc
+    "c" '(:ignore t :which-key "code")
+    "cb" 'eval-buffer
+    "cr" 'eval-region
+    "bd" 'kill-buffer)
   )
 
 (define-key minibuffer-local-map [escape] 'minibuffer-keyboard-quit)
@@ -180,13 +212,6 @@
 (define-key minibuffer-local-must-match-map [escape] 'minibuffer-keyboard-quit)
 (define-key minibuffer-local-isearch-map [escape] 'minibuffer-keyboard-quit)
 
-(setq window-divider-default-right-width 12)
-(setq window-divider-default-bottom-width 12)
-(setq window-divider-default-places t)
-(window-divider-mode 1)
-
-(setq default-frame-alist
-      (append (list '(internal-border-width . 12))))
 
 ;; ----------------------------------------------------------------------
 ;; edgar theme
@@ -198,14 +223,149 @@
   (load-theme 'edgar t))
 
 ;; ----------------------------------------------------------------------
+;; evil
+;; ----------------------------------------------------------------------
+
+(use-package evil
+  :preface
+  (setq evil-symbol-word-search t
+        evil-normal-state-cursor 'box
+        evil-emacs-state-cursor  'box
+        evil-insert-state-cursor 'bar
+        evil-visual-state-cursor 'hollow
+        evil-ex-interactive-search-highlight 'selected-window
+        evil-kbd-macro-suppress-motion-error t)
+  :config
+  (evil-select-search-module 'evil-search-module 'evil-search)
+  (setq evil-undo-system 'undo-tree)
+  (dolist (mode '(custom-mode
+                  eshell-mode
+                  term-mode))
+    (add-to-list 'evil-emacs-state-modes mode))
+  (define-key evil-insert-state-map (kbd "C-g") 'evil-normal-state)
+  (evil-mode 1))
+
+;; (use-package evil-leader
+;;   :after evil
+;;   :config
+;;   (global-evil-leader-mode t)
+;;   (evil-leader/set-leader "<SPC>")
+;;   ;; (evil-leader/set-key
+;;   ;;   "s s" 'swiper
+;;   ;;   "d x w" 'delete-trailing-whitespace)
+;;   )
+
+(use-package evil-surround
+  :after evil
+  :config
+  (global-evil-surround-mode))
+
+(use-package evil-easymotion
+  :after evil
+  :commands evilem-create evilem-default-keybindings
+  :config
+  ;; Use evil-search backend, instead of isearch
+  (evilem-make-motion evilem-motion-search-next #'evil-ex-search-next
+                      :bind ((evil-ex-search-highlight-all nil)))
+  (evilem-make-motion evilem-motion-search-previous #'evil-ex-search-previous
+                      :bind ((evil-ex-search-highlight-all nil)))
+  (evilem-make-motion evilem-motion-search-word-forward #'evil-ex-search-word-forward
+                      :bind ((evil-ex-search-highlight-all nil)))
+  (evilem-make-motion evilem-motion-search-word-backward #'evil-ex-search-word-backward
+                      :bind ((evil-ex-search-highlight-all nil)))
+
+  ;; Rebind scope of w/W/e/E/ge/gE evil-easymotion motions to the visible
+  ;; buffer, rather than just the current line.
+  (put 'visible 'bounds-of-thing-at-point (lambda () (cons (window-start) (window-end))))
+  (evilem-make-motion evilem-motion-forward-word-begin #'evil-forward-word-begin :scope 'visible)
+  (evilem-make-motion evilem-motion-forward-WORD-begin #'evil-forward-WORD-begin :scope 'visible)
+  (evilem-make-motion evilem-motion-forward-word-end #'evil-forward-word-end :scope 'visible)
+  (evilem-make-motion evilem-motion-forward-WORD-end #'evil-forward-WORD-end :scope 'visible)
+  (evilem-make-motion evilem-motion-backward-word-begin #'evil-backward-word-begin :scope 'visible)
+  (evilem-make-motion evilem-motion-backward-WORD-begin #'evil-backward-WORD-begin :scope 'visible)
+  (evilem-make-motion evilem-motion-backward-word-end #'evil-backward-word-end :scope 'visible)
+  (evilem-make-motion evilem-motion-backward-WORD-end #'evil-backward-WORD-end :scope 'visible))
+
+(use-package evil-escape
+  :commands evil-escape
+  :after evil
+  :init
+  (setq evil-escape-excluded-states '(normal visual multiedit emacs motion)
+        evil-escape-excluded-major-modes '(neotree-mode treemacs-mode vterm-mode)
+        evil-escape-key-sequence "jk"
+        evil-escape-delay 0.15)
+  (evil-define-key* '(insert replace visual operator) 'global "\C-g" #'evil-escape)
+  :config
+  (evil-escape-mode))
+
+(use-package evil-nerd-commenter
+  :commands (evilnc-comment-operator
+             evilnc-inner-comment
+             evilnc-outer-commenter))
+
+
+(use-package evil-snipe
+;;  :commands evil-snipe-local-mode evil-snipe-override-local-mode
+  :after evil
+  :init
+  (setq evil-snipe-smart-case t
+        evil-snipe-scope 'line
+        evil-snipe-repeat-scope 'visible
+        evil-snipe-char-fold t)
+  :config
+  (evil-snipe-mode 1)
+  (evil-snipe-override-mode 1)
+  ;;  (push evil-snipe-disabled-modes 'Info-mode 'calc-mode 'treemacs-mode 'dired-mode)
+  )
+
+(use-package evil-surround
+  :commands (global-evil-surround-mode
+             evil-surround-edit
+             evil-Surround-edit
+             evil-surround-region)
+  :config
+  (global-evil-surround-mode 1))
+
+
+(use-package evil-textobj-anyblock
+  :defer t
+  :config
+  (setq evil-textobj-anyblock-blocks
+        '(("(" . ")")
+          ("{" . "}")
+          ("\\[" . "\\]")
+          ("<" . ">"))))
+
+(use-package evil-visualstar
+  :commands (evil-visualstar/begin-search
+             evil-visualstar/begin-search-forward
+             evil-visualstar/begin-search-backward)
+  :init
+  (evil-define-key* 'visual 'global
+                    "*" #'evil-visualstar/begin-search-forward
+                    "#" #'evil-visualstar/begin-search-backward))
+
+(use-package vimish-fold
+  :ensure
+  :after evil)
+
+(use-package evil-vimish-fold
+  :ensure
+  :after vimish-fold
+  :hook ((prog-mode conf-mode text-mode) . evil-vimish-fold-mode))
+
+;; ----------------------------------------------------------------------
 ;; avy
 ;; ----------------------------------------------------------------------
 
 (use-package avy
-  :bind (("s-s w" . avy-goto-word-or-subword-1)
-         ("s-s y" . avy-goto-symbol-1)
-         ("s-s c" . avy-goto-char-2)
-         ("s-j l" . avy-goto-line))
+  :general
+  (general-spc
+    "sw" 'avy-goto-word-or-subword-1
+    "sy" 'avy-goto-symbol-1
+    "sc" 'avy-goto-char-2
+    "st" 'avy-goto-char-timer
+    "sj" 'avy-goto-line)
   :config
   (setq avy-background t))
 
@@ -241,32 +401,8 @@
 
 
 ;; ----------------------------------------------------------------------
-;; corfu / company
+;; corfu
 ;; ----------------------------------------------------------------------
-
-;; (use-package company
-;;   :commands company-mode
-;;   :bind (:map company-active-map
-;;               ("<ESC>" . 'company-abort)
-;;               ("C-n" . 'company-select-next)
-;;               ("C-p" . 'company-select-previous))
-;;   :hook ((emacs-lisp-mode . company-mode)
-;;          (lisp-mode . company-mode)
-;;          (sly-mrepl-mode . company-mode))
-;;   :config
-;;   ;; (add-hook 'after-init-hook 'global-company-mode)
-;;   (global-company-mode)
-;;   (setq company-selection-wrap-around t)
-;;   (setq company-require-match 'never)
-;;   ;; (company-tng-configure-default)
-;;   (setq company-idle-delay 0)
-;;   ;; (global-set-key (kbd "TAB") #'company-indent-or-complete-common)
-;;   )
-
-;; (use-package company-quickhelp
-;;   :after company
-;;   :config
-;;   (define-key company-active-map (kbd "C-c h") #'company-quickhelp-manual-begin))
 
 ;; (use-package cape)
 
@@ -336,6 +472,19 @@
   :bind (("M-/" . dabbrev-completion)
          ("C-M-/" . dabbrev-expand)))
 
+
+(use-package cape
+  :bind (("C-c p p" . completion-at-point)
+         ("C-c p d" . cape-dabbrev)
+         ("C-c p f" . cape-file)
+         ("C-c p s" . cape-symbol)
+         ("C-c p i" . cape-ispell))
+  :config
+  ;; Use Company backends as Capfs.
+  (setq-local completion-at-point-functions
+              (mapcar #'cape-company-to-capf
+                      (list #'company-files #'company-ispell #'company-dabbrev))))
+
 ;; (use-package emacs
 ;;   :init
 ;;   (setq completion-cycle-threshold 3)
@@ -348,8 +497,11 @@
 
 (use-package dired
   :ensure nil
-  :bind (("s-d d" . dired)
-         ("s-d j" . dired-jump))
+  :general
+  (general-spc
+    "d" '(:ignore t :which-key "dired")
+    "dd" 'dired
+    "dj" 'dired-jump)
   :custom
   (dired-listing-switches "-laGh1v --group-directories-first")
   (dired-recursive-copies 'always)
@@ -371,16 +523,20 @@
   :hook (dired-mode . auto-revert-mode))
 
 (use-package dired-subtree
-  :bind (:map dired-mode-map
-              ("<tab>" . dired-subtree-toggle)))
+  :general
+  (general-def dired-mode-map
+    "<tab>" 'dired-subtree-toggle))
 
 (use-package dired-narrow
   ;; type 'g' to un-narrow
-  :bind (:map dired-mode-map
-              ("/" . dired-narrow)))
+  :general
+  (general-def dired-mode-map
+    "/" 'dired-narrow))
 
 (use-package dired-sidebar
-  :bind ("s-d s" . dired-sidebar-toggle-sidebar)
+  :general
+  (general-spc
+    "ds" 'dired-sidebar-toggle-sidebar)
   :init
   (add-hook 'dired-sidebar-mode-hook
             (lambda ()
@@ -400,8 +556,15 @@
   (diredfl-global-mode 0))
 
 (use-package dired-git-info
-  :bind (:map dired-mode-map
-              (")" . dired-git-info-mode)))
+  :general
+  (general-def dired-mode-map
+    ")" 'dired-git-info-mode))
+
+
+(use-package all-the-icons-dired
+  :after all-the-icons
+  :hook (dired-mode . all-the-icons-dired-mode))
+
 
 ;; ----------------------------------------------------------------------
 ;; info
@@ -422,8 +585,8 @@
 ;; from doom emacs
 (defun +emacs-lisp-highlight-vars-and-faces (end)
   "Match defined variables and functions to END.
-Functions are differentiated into special forms, built-in functions and
-library/userland functions"
+  Functions are differentiated into special forms, built-in functions and
+  library/userland functions"
   (catch 'matcher
     (while (re-search-forward "\\(?:\\sw\\|\\s_\\)+" end t)
       (let ((ppss (save-excursion (syntax-ppss))))
@@ -476,6 +639,7 @@ library/userland functions"
       ;; highlight defined, special variables & functions
       (when +emacs-lisp-enable-extra-fontification
         `((+emacs-lisp-highlight-vars-and-faces . +emacs-lisp--face))))))
+
   (defun my/debugger-pp-frame ()
     (interactive)
     (let ((inhibit-read-only t)
@@ -509,15 +673,20 @@ library/userland functions"
 ;; M-, pop back to prevous marks
 (use-package elisp-slime-nav
   :diminish
-  :bind ("s-h v" . elisp-slime-nav-describe-elisp-thing-at-point)
+  :general
+  (general-spc
+    "hv" 'elisp-slime-nav-describe-elisp-thing-at-point)
   :hook ((emacs-lisp-mode ielm-mode lisp-interaction-mode) . elisp-slime-nav-mode))
 
 (use-package macrostep
-  :bind (("s-c m e" . macrostep-expand)
-         ("s-c m n" . macrostep-next-macro)
-         ("s-c m p" . macrostep-prev-macro)
-         ("s-c m c" . macrostep-collapse)
-         ("s-c m q" . macrostep-collapse-all)))
+  :general
+  (general-spc
+    "cm" '(:ignore t :which-key "macrostep")
+    "cme" 'macrostep-expand
+    "cmn" 'macrostep-next-macro
+    "cmp" 'macrostep-prev-macro
+    "cmc" 'macrostep-collapse
+    "cmq" 'macrostep-collapse-all))
 
 (use-package smartparens
   :diminish smartparens-mode
@@ -527,11 +696,14 @@ library/userland functions"
          (ielm-mode . smartparens-mode)
          (eval-expression-minibuffer-setup . smartparens-mode))
   ;; FIXME: this is not working
-  :bind (:map smartparens-mode-map
-              ("C-)" . sp-forward-slurp-sexp)
-              ("C-(" . sp-backward-slurp-sexp)
-              ("C-}" . sp-forward-barf-sexp)
-              ("C-{" . sp-backward-barf-sexp)))
+  :general
+  (general-spc-m
+   :states 'normal
+   :keymaps 'smartparens-mode-map
+   ")" 'sp-forward-slurp-sexp
+   "(" 'sp-backward-slurp-sexp
+   "}" 'sp-forward-barf-sexp
+   "{" 'sp-backward-barf-sexp))
 
 (use-package highlight-parentheses
   :diminish highlight-parentheses-mode
@@ -550,21 +722,28 @@ library/userland functions"
 ;; common-lisp
 ;; ----------------------------------------------------------------------
 
-(defvar inferior-lisp-program "sbcl")
 (defvar sly-contribs '(sly-fancy))
 
 (use-package sly
   :init
   (sly-setup)
+  :custom
+  (inferior-lisp-program "sbcl")
   :config
   (add-hook 'lisp-mode-hook #'sly-editing-mode)
-  (add-hook 'sly-mode-hook
-            (lambda ()
-              (unless (sly-connected-p)
-                (save-excursion (sly)))))
+  ;; (add-hook 'sly-mode-hook
+  ;;           (lambda ()
+  ;;             (unless (sly-connected-p)
+  ;;               (save-excursion (sly)))))
   (setq sly-kill-without-query-p t
         sly-net-coding-system 'utf-8-unix
-        sly-complete-symbol-function 'sly-simple-completions))
+        sly-complete-symbol-function 'sly-simple-completions)
+
+  (defun turn-off-sly-symbol-completion-mode ()
+    (sly-symbol-completion-mode -1))
+  :hook
+  (sly-mode . turn-off-sly-symbol-completion-mode))
+
 
 (use-package sly-repl-ansi-color
   :defer t
@@ -587,6 +766,7 @@ library/userland functions"
               ;; programs that don't work well in eshell and should be run in visual mode
               (add-to-list 'eshell-visual-commands "ssh")
               (add-to-list 'eshell-visual-commands "tail")
+              (add-to-list 'eshell-visual-commands "pacman")
               (add-to-list 'eshell-visual-commands "htop"))))
 
 ;; ----------------------------------------------------------------------
@@ -681,7 +861,7 @@ library/userland functions"
 
 (use-package orderless
   :init
-  (setq completion-styles '(orderless))
+  (setq completion-styles '(orderless basic))
   :config
   (setq orderless-component-separator "[ &]")
   (defun just-one-face (fn &rest args)
@@ -706,10 +886,8 @@ library/userland functions"
   (setq enable-recursive-minibuffers t))
 
 (use-package marginalia
-  ;; Either bind `marginalia-cycle` globally or only in the minibuffer
-  :bind (("M-A" . marginalia-cycle)
-         :map minibuffer-local-map
-         ("M-A" . marginalia-cycle))
+  :bind (:map minibuffer-local-map
+              ("M-A" . marginalia-cycle))
   :init
   (marginalia-mode)
   :config
@@ -718,7 +896,35 @@ library/userland functions"
   )
 
 (use-package consult
-  ;; Replace bindings. Lazily loaded due by `use-package'.
+  :general
+  (general-spc
+    "b" '(:ignore t :which-key "buffer")
+    "bb" 'consult-buffer
+    "bo" 'consult-buffer-other-window
+
+    "s" '(:ignore t :which-key "search")
+    "sf" 'consult-find
+    "sF" 'consult-locate
+    "sg" 'consult-grep
+    "sG" 'consult-git-grep
+    "sr" 'consult-ripgrep
+    "sl" 'consult-line
+    "sL" 'consult-line-multi
+    "sm" 'consult-multi-occur
+    "sk" 'consult-keep-lines
+    "su" 'consult-focus-lines
+    "se" 'consult-isearch-history
+
+    "g" '(:ignore t :which-key "goto")
+    "ge" 'consult-compile-error
+    "gf" 'consult-flymake
+    "gg" 'consult-goto-line
+    "go" 'consult-outline
+    "gm" 'consult-mark
+    "gk" 'consult-global-mark
+    "gi" 'consult-imenu
+    "gI" 'consult-imenu-multi
+    )
   :bind (
          ;; C-c bindings (mode-specific-map)
          ("s-b h" . consult-history)
@@ -727,9 +933,6 @@ library/userland functions"
          ;; ("C-c k" . consult-kmacro)
          ;; ("C-x M-:" . consult-complex-command)     ;; orig. repeat-complex-command
 
-         ;; buffer
-         ("s-b b" . consult-buffer)                ;; orig. switch-to-buffer
-         ("s-b o" . consult-buffer-other-window) ;; orig. switch-to-buffer-other-window
          ;; ("C-x 5 b" . consult-buffer-other-frame)  ;; orig. switch-to-buffer-other-frame
 
          ;; ;; Custom M-# bindings for fast register access
@@ -740,33 +943,10 @@ library/userland functions"
          ;; ("M-y" . consult-yank-pop)                ;; orig. yank-pop
          ("<help> a" . consult-apropos)            ;; orig. apropos-command
 
-         ;; goto
-         ("s-g e" . consult-compile-error)
-         ("s-g f" . consult-flymake)               ;; Alternative: consult-flycheck
-         ("s-g g" . consult-goto-line)             ;; orig. goto-line
-         ("s-g s -g" . consult-goto-line)           ;; orig. goto-line
-         ("s-g o" . consult-outline)               ;; Alternative: consult-org-heading
-         ("s-g m" . consult-mark)
-         ("s-g k" . consult-global-mark)
-         ("s-g i" . consult-imenu)
-         ("s-g I" . consult-imenu-multi)
-
-         ;; search
-         ("s-s f" . consult-find)
-         ("s-s F" . consult-locate)
-         ("s-s g" . consult-grep)
-         ("s-s G" . consult-git-grep)
-         ("s-s r" . consult-ripgrep)
-         ("s-s l" . consult-line)
-         ("s-s L" . consult-line-multi)
-         ("s-s m" . consult-multi-occur)
-         ("s-s k" . consult-keep-lines)
-         ("s-s u" . consult-focus-lines)
-         ("s-s e" . consult-isearch-history)
          :map isearch-mode-map
-         ("s-s e" . consult-isearch-history)       ;; orig. isearch-edit-string
-         ("s-s l" . consult-line)                  ;; needed by consult-line to detect isearch
-         ("s-s L" . consult-line-multi))           ;; needed by consult-line to detect isearch
+         ("C-e" . consult-isearch-history)       ;; orig. isearch-edit-string
+         ("C-l" . consult-line)                  ;; needed by consult-line to detect isearch
+         ("C-M-l" . consult-line-multi))           ;; needed by consult-line to detect isearch
 
   ;; Enable automatic preview at point in the *Completions* buffer. This is
   ;; relevant when you use the default completion UI. You may want to also
@@ -817,14 +997,23 @@ library/userland functions"
             (car (project-roots project)))))
   )
 
+(use-package consult-dir
+  :ensure t
+  :bind
+  (:map minibuffer-local-filename-completion-map
+        ("M-." . consult-dir)
+        ("M-j" . consult-dir-jump-file)))
+
 ;; ----------------------------------------------------------------------
 ;; embark
 ;; ----------------------------------------------------------------------
 
 (use-package embark
-  :bind(("C-." . embark-act)
-        :map minibuffer-local-map
-        ("C-M-e" . embark-act))
+  :general
+  (general-spc
+    "a" 'embark-act)
+  :bind(:map minibuffer-local-map
+             ("C-M-a" . embark-act))
   :config
   (setq embark-action-indicator
         (lambda (map)
@@ -841,6 +1030,23 @@ library/userland functions"
   :hook
   (embark-collect-mode . consult-preview-at-point-mode))
 
+
+(use-package wgrep
+  :after (embark-consult ripgrep)
+  :bind (:map wgrep-mode-map
+              ;; Added keybinding to echo Magit behavior
+              ("C-c C-c" . save-buffer)
+              :map grep-mode-map
+              ("e" . wgrep-change-to-wgrep-mode)
+              :map ripgrep-search-mode-map
+              ("e" . wgrep-change-to-wgrep-mode)))
+
+
+;; (use-package embark-extra-indicators
+;;   :commands
+;;   embark-which-key-indicator
+;;   embark-minibuffer-indicator)
+
 ;; ----------------------------------------------------------------------
 ;; hydra
 ;; ----------------------------------------------------------------------
@@ -852,11 +1058,16 @@ library/userland functions"
 ;; ----------------------------------------------------------------------
 
 (use-package helpful
-  :bind (([remap describe-command] . helpful-command)
-         ([remap describe-key] . helpful-key)
-         ("s-h h" . helpful-at-point)
-         :map helpful-mode-map
-         ("q" . delete-window)))
+  :general
+  (general-spc
+    "p" '(:ignore t :which-key "help")
+    "hc" 'helpful-command
+    "hv" 'helpful-variable
+    "hf" 'helpful-function
+    "hk" 'helpful-key
+    "hh" 'helpful-at-point)
+  :bind (:map helpful-mode-map
+              ("q" . delete-window)))
 
 ;; ----------------------------------------------------------------------
 ;; buffer placement
@@ -907,30 +1118,36 @@ library/userland functions"
         lsp-enable-symbol-highlighting t
         lsp-semantic-tokens-enable t
         lsp-prefer-flymake t)
-  :bind (("s-l c" . lsp-describe-session)
-         ("s-l d" . lsp-find-declaration)
-         ("s-l D" . xref-find-definitions)
-         ("s-l R" . xref-find-references)
-         ("s-l i" . lsp-find-implementation)
-         ("s-l t" . lsp-find-type-definition)
-         ("s-l ?" . display-local-help)
-         ("s-l s" . lsp-signature-help)
-         ("s-l r" . lsp-rename)
-         ("s-l h" . lsp-describe-thing-at-point)
-         ("s-l f" . lsp-format-buffer)
-         ("s-l x" . lsp-execute-code-action)
-         ("s-l R" . lsp-restart-workspace)
-         ("s-l S" . lsp-shutdown-workspace))
+  :general
+  (general-spc
+    "l" '(:ignore t :which-key "lsp")
+    "lc" 'lsp-describe-session
+    "ld" 'lsp-find-declaration
+    "lD" 'xref-find-definitions
+    "lR" 'xref-find-references
+    "li" 'lsp-find-implementation
+    "lt" 'lsp-find-type-definition
+    "l?" 'display-local-help
+    "ls" 'lsp-signature-help
+    "lr" 'lsp-rename
+    "lh" 'lsp-describe-thing-at-point
+    "lf" 'lsp-format-buffer
+    "lx" 'lsp-execute-code-action
+    "lw" 'lsp-restart-workspace
+    "ls" 'lsp-shutdown-workspace)
   :hook (((c-mode c++-mode java-mode python-mode) . lsp)
          ;; (lsp-completion-mode . my/lsp-mode-setup-completion)
          ))
 
 (use-package lsp-ui
   :after lsp-mode
-  :bind (("s-l s-m" . lsp-ui-imenu)
-         ("s-l s-d" . lsp-ui-peek-find-definitions)
-         ("s-l s-r" . lsp-ui-peek-find-references)
-         ("s-l s-i" . lsp-ui-peek-find-implementation))
+  :general
+  (general-spc
+    "lu" '(:ignore t :which-key "lsp-ui")
+    "lum" 'lsp-ui-imenu
+    "lud" 'lsp-ui-peek-find-definitions
+    "lur" 'lsp-ui-peek-find-references
+    "lui" 'lsp-ui-peek-find-implementation)
   :config
   (setq lsp-ui-doc-enable nil)
   (setq lsp-ui-doc-delay 100)
@@ -952,21 +1169,26 @@ library/userland functions"
 ;; ----------------------------------------------------------------------
 
 (use-package magit
-  :bind (("s-m s" . magit-status)
-         ("s-m d" . magit-diff)
-         ("s-m c" . magit-commit)
-         ("s-m p" . magit-push)))
+  :general
+  (general-spc
+    "v" '(:ignore t :which-key "git")
+    "vs" 'magit-status
+    "vd" 'magit-diff
+    "vc" 'magit-commit
+    "vp" 'magit-push))
 
 (use-package git-gutter
   :diminish git-gutter-mode
   :init
-  (progn
-    (add-hook 'prog-mode-hook 'git-gutter-mode)
-    (add-hook 'org-mode-hook 'git-gutter-mode))
-  :bind (("s-m g n" . git-gutter:next-hunk)
-         ("s-m g p" . git-gutter:previous-hunk)
-         ("s-m g =" . git-gutter:popup-hunk)
-         ("s-m g r" . git-gutter:revert-hunk))
+  (add-hook 'prog-mode-hook 'git-gutter-mode)
+  (add-hook 'org-mode-hook 'git-gutter-mode)
+  :general
+  (general-spc
+    "vg" '(:ignore t :which-key "git-gutter")
+    "vgn" 'git-gutter:next-hunk
+    "vgp" 'git-gutter:previous-hunk
+    "vgP" 'git-gutter:popup-hunk
+    "vgr" 'git-gutter:revert-hunk)
   :custom
   (git-gutter:modified-sign ">")
   (git-gutter:added-sign "+")
@@ -986,13 +1208,17 @@ library/userland functions"
 
 (use-package org
   :mode ("\\.org\\'" . org-mode)
-  :bind (("s-o l s" . org-store-link)
-         ("s-o l i" . org-insert-link)
-         ("s-o m" . org-mu4e-store-and-capture)
-         ("s-o c" . org-capture)
-         ("s-o a" . org-agenda)
-         ("s-o b" . org-iswitchb)
-         ("s-o r" . org-refile))
+  :general
+  (general-spc-m
+    :states 'normal
+    :keymaps 'org-mode-map
+    "s" 'org-store-link
+    "i" 'org-insert-link
+    "m" 'org-mu4e-store-and-capture
+    "c" 'org-capture
+    "a" 'org-agenda
+    "b" 'org-iswitchb
+    "r" 'org-refile)
   :custom-face
   (org-document-title ((t (:foreground "#171717" :weight bold :height 1.5))))
   :config
@@ -1216,7 +1442,7 @@ library/userland functions"
   (setq org-ref-pdf-directory '("~/Documents/Economics/files/"))
 
   (setq bibtex-completion-bibliography "~/Documents/Economics/Economics.bib"
-        bibtex-completion-library-path "~/Documents/Economics/files/"
+        bibtex-completion-library-(point)ath "~/Documents/Economics/files/"
         ;; bibtex-completion-notes-path "~/Dropbox/bibliography/bibtex-notes"
         ))
 
@@ -1244,12 +1470,19 @@ library/userland functions"
 
 ;; download web pages to org
 (use-package org-web-tools
-  :bind (("s-o w" . org-web-tools-insert-web-page-as-entry)
-         ("s-o u" . org-web-tools-insert-link-for-url)))
+  :general
+  (general-spc-m
+    :states 'normal
+    :keymaps 'org-mode-map
+    "w" 'org-web-tools-insert-link-for-url
+    "u" 'org-web-tools-insert-web-page-as-entry))
 
 ;; drag and drop images to org
 (use-package org-download
-  :bind ("s-o i" . org-download-image)
+  :general
+  (general-spc
+    "o" '(:ignore t :which-key "org")
+    "oi" 'org-download-image)
   :config
   (setq-default org-download-image-dir "~/Notes/Roam/images")
   :hook (dired-mode . org-download-enable))
@@ -1294,9 +1527,7 @@ library/userland functions"
           (texmathp)
           (member (LaTeX-current-environment) previewable-environments))
       ad-do-it
-    (preview-section)
-    )
-  )
+    (preview-section)))
 
 ;; ----------------------------------------------------------------------
 ;; mu4e
@@ -1478,7 +1709,9 @@ library/userland functions"
              treemacs-filewatch-mode
              treemacs-fringe-indicator-mode
              treemacs-git-mode)
-  :bind ("s-d t" . treemacs)
+  :general
+  (general-spc
+    "dt" 'treemacs)
   :config
   (setq treemacs-collapse-dirs (if treemacs-python-executable 3 0)
         treemacs-sorting 'alphabetic-case-insensitive-desc
@@ -1533,10 +1766,12 @@ library/userland functions"
 (use-package ace-window)
 
 (use-package windmove
-  :bind (("C-s-l" . windmove-right)
-         ("C-s-k" . windmove-up)
-         ("C-s-j" . windmove-down)
-         ("C-s-h" . windmove-left))
+  :general
+  (general-spc
+    "wl" 'windmove-right
+    "wk" 'windmove-up
+    "wj" 'windmove-down
+    "wh" 'windmove-left)
   :config
   (windmove-default-keybindings))
 
@@ -1549,15 +1784,19 @@ library/userland functions"
 
 ;; move a buffer to another window in a specified direction
 (use-package buffer-move
-  :bind (("M-s-k" . buf-move-up)
-         ("M-s-j" . buf-move-down)
-         ("M-s-h" . buf-move-left)
-         ("M-s-l" . buf-move-right)))
+  :general
+  (general-spc
+    "bk" 'buf-move-up
+    "bj" 'buf-move-down
+    "bh" 'buf-move-left
+    "bl" 'buf-move-right))
 
 ;; undo a change to a window configuration
 (use-package winner
-  :bind (("s-w u" .  winner-undo)
-         ("s-w r" .  winner-redo))
+  :general
+  (general-spc
+    "wu" ' winner-undo
+    "wr" ' winner-redo)
   :init
   (winner-mode 1))
 
@@ -1584,28 +1823,6 @@ library/userland functions"
 (use-package emacs
   :ensure nil
   :config
-  (defun my/load-only-theme ()
-    "Disable all themes and then load a single theme interactively."
-    (interactive)
-    (while custom-enabled-themes
-      (disable-theme (car custom-enabled-themes)))
-    (call-interactively 'load-theme))
-
-  (defun my/shell-command (command)
-    "Execute shell COMMAND from the minibuffer."
-    (interactive (list (read-shell-command "$ ")))
-    (start-process-shell-command command nil command))
-
-  (defun my/insert-new-line ()
-    (interactive)
-    (move-end-of-line nil)
-    (newline-and-indent))
-
-  (defun my/insert-new-line-yank ()
-    (interactive)
-    (move-end-of-line nil)
-    (newline)
-    (yank))
 
   (defun my/next-begin-sexp ()
     (interactive)
@@ -1616,12 +1833,6 @@ library/userland functions"
   (defun my/prev-begin-sexp ()
     (interactive)
     (search-backward "(" nil t))
-
-  (defun my/copy-line ()
-    (interactive)
-    (let ((beg (line-beginning-position))
-          (end (line-end-position)))
-      (copy-region-as-kill beg end)))
 
   (defun my/mark-sexp ()
     (interactive)
@@ -1637,20 +1848,6 @@ library/userland functions"
       (my/prev-begin-sexp))
     (kill-sexp))
 
-  (defun my/backward-symbol ()
-    (interactive)
-    (forward-symbol -1))
-
-  (defun my/get-positions-of-line-or-region ()
-    (let (beg end)
-      (if (and mark-active (> (point) (mark)))
-          (exchange-point-and-mark))
-      (setq beg (line-beginning-position))
-      (if mark-active
-          (exchange-point-and-mark))
-      (setq end (line-end-position))
-      (cons beg end)))
-
   (defun my/html-to-org ()
     (interactive)
     (require 'org-web-tools)
@@ -1661,14 +1858,13 @@ library/userland functions"
                            (org-mode)
                            (insert txt)
                            (insert "hello")))))
-  :bind (("s-, c" . my/shell-command)
-         ("s-, o" . my/insert-new-line)
-         ("s-, p" . my/insert-new-line-yank)
-         ("s-, l" . my/next-begin-sexp)
-         ("s-, h" . my/prev-begin-sexp)
-         ("s-, y" . my/copy-line)
-         ("s-, m" . my/mark-sexp)
-         ("s-, k" . my/kill-sexp)))
+  :general
+  ;; should be in lisp-mode-map
+  (general-spc
+    "cl" 'my/next-begin-sexp
+    "ch" 'my/prev-begin-sexp
+    "cM" 'my/mark-sexp
+    "ck" 'my/kill-sexp))
 
 ;; ----------------------------------------------------------------------
 ;; hydras
@@ -1780,28 +1976,43 @@ library/userland functions"
          ("s-m d" . bookmark-delete)))
 
 ;; ----------------------------------------------------------------------
-;; window
+;; window / buffer
 ;; ----------------------------------------------------------------------
 
 (use-package window
   :ensure nil
-  :bind (("s-w v" . split-window)
-         ("s-w b" . split-window-below)
-         ("s-w +" . enlarge-window)
-         ("s-w ." . enlarge-window-horizontally)
-         ("s-w ," . shrink-window-horizontally)
-         ("s-w =" . balance-windows)
-         ("s-w d" . delete-window)
-         ("s-w z" . delete-other-windows)
-         ("s-w o" . other-window)
-         ("s-b p" . previous-buffer)
-         ("s-b n" . next-buffer)))
+  :general
+  (general-spc
+    "w" '(:ignore t :which-key "window")
+    "wv" 'split-window-right
+    "wb" 'split-window-below
+    "w+" 'enlarge-window
+    "w." 'enlarge-window-horizontally
+    "w," 'shrink-window-horizontally
+    "w=" 'balance-windows
+    "wd" 'delete-window
+    "wz" 'delete-other-windows
+    "wo" 'other-window
+
+    "bp" 'previous-buffer
+    "bn" 'next-buffer))
 
 (use-package ace-window
-  :bind ("s-w w" . ace-window))
+  :general
+  (general-spc
+    "ww" 'ace-window))
 
 (use-package ibuffer
-  :bind ("s-b i" . ibuffer))
+  :general
+  (general-spc
+    "bi" 'ibuffer))
+
+
+(use-package ibuffer-sidebar
+  :general
+  (general-spc
+    "bs" 'ibuffer-sidebar-toggle-sidebar))
+
 
 ;; ----------------------------------------------------------------------
 ;; files
@@ -1809,9 +2020,12 @@ library/userland functions"
 
 (use-package files
   :ensure nil
-  :bind (("s-f s" . save-buffer)
-         ("s-f f" . find-file)
-         ("s-f w" . write-file)))
+  :general
+  (general-spc
+    "f" '(:ignore t :which-key "file")
+    "fs" 'save-buffer
+    "ff" 'find-file
+    "fw" 'write-file))
 
 ;; ----------------------------------------------------------------------
 ;; lisp
@@ -1819,46 +2033,62 @@ library/userland functions"
 
 (use-package lisp
   :ensure nil
-  :bind (("s-e f" . mark-defun)
-         ("s-e s" . mark-sexp)))
+  :general
+  (general-spc
+    "e" '(:ignore t :which-key "emacs")
+    "ef" 'mark-defun
+    "es" 'mark-sexp))
 
 (use-package ielm
-  :bind ("s-e i" . ielm))
+  :general
+  (general-spc
+    "ei" 'ielm))
 
 (use-package elisp-mode
   :ensure nil
-  :bind (("s-e e" . eval-last-sexp)
-         ("s-e n" . eval-defun)))
+  :general
+  (general-spc-m
+    :states 'normal
+    :keymaps 'emacs-lisp-mode-map
+    "s" 'eval-last-sexp
+    "f" 'eval-defun))
 
 (use-package edebug
-  :bind ("s-e d" .  edebug-defun))
+  :general
+  (general-spc-m
+    :states 'normal
+    :keymaps 'emacs-lisp-mode-map
+    "d" 'edebug-defun))
 
 ;; ----------------------------------------------------------------------
 ;; project
 ;; ----------------------------------------------------------------------
 
 (use-package project
-  :bind (("s-p s" . project-switch-project)
-         ("s-p b" . project-swtch-to-buffer)
-         ("s-p d" . project-dired)
-         ("s-p c" . project-compile)
-         ("s-p e" . project-eshell)
-         ("s-p k" . project-kill-buffers)
-         ("s-p f" . project-find-file)))
+  :general
+  (general-spc
+    "p" '(:ignore t :which-key "project")
+    "ps" 'project-switch-project
+    "pb" 'project-swtch-to-buffer
+    "pd" 'project-dired
+    "pc" 'project-compile
+    "pe" 'project-eshell
+    "pk" 'project-kill-buffers
+    "pf" 'project-find-file))
 
 ;; ----------------------------------------------------------------------
 ;; flymake
 ;; ----------------------------------------------------------------------
 
 (use-package flymake
-  :bind (("s-k c" . display-local-help)
-         ("s-k e" . flymake-show-buffer-diagnostics)
-         ("s-k m" . flymake-menu)
-         ("s-k n" . flymake-goto-next-error)
-         ("s-k p" . flymake-goto-previous-error)))
-
-(put 'downcase-region 'disabled nil)
-(put 'dired-find-alternate-file 'disabled nil)
+  :general
+  (general-spc
+    "k" '(:ignore t :which-key "flymake")
+    "kc" 'display-local-help
+    "ke" 'flymake-show-buffer-diagnostics
+    "km" 'flymake-menu
+    "kn" 'flymake-goto-next-error
+    "kp" 'flymake-goto-previous-error))
 
 (provide 'init)
 ;;; init.el ends here

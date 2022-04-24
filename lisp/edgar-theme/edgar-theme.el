@@ -246,7 +246,7 @@ Also bind `class' to ((class color) (min-colors 89))."
                                      :background ,region-bg-color))))
    `(mode-line-buffer-id ((t (:foreground ,keyword-face-fg-color :weight bold))))
    `(mode-line-inactive ((t (:foreground ,comment-delimiter-fg-color
-                                         :background "background-highlight-color"))))
+                                         :background ,default-bg-color))))
 ;;;;; ace-jump
    `(ace-jump-face-background
      ((t (:foreground ,annotation-fg-color :background ,default-bg-color :inverse-video nil))))
