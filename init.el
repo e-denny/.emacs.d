@@ -4,26 +4,26 @@
 
 ;;; Code:
 
-;; Install straight.el
-(defvar bootstrap-version)
+;;; Package system
 
-(let ((bootstrap-file
-       (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
-      (bootstrap-version 5))
-  (unless (file-exists-p bootstrap-file)
-    (with-current-buffer
-        (url-retrieve-synchronously
-         "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
-         'silent 'inhibit-cookies)
-      (goto-char (point-max))
-      (eval-print-last-sexp)))
-  (load bootstrap-file nil 'nomessage))
+(require 'package)
 
-;; Configure use-package to use straight.el by default
-(setq straight-use-package-by-default t)
+(setq package-archives
+      '(("melpa" . "https://melpa.org/packages/")
+        ("gnu"   . "https://elpa.gnu.org/packages/")))
 
-;; Install use-package
-(straight-use-package 'use-package)
+;; make sure packages are in the load path
+(package-initialize)
+
+(unless (package-installed-p 'use-package)
+  (package-refresh-contents)
+  (package-install 'use-package))
+
+(eval-when-compile
+  (require 'use-package))
+
+(require 'use-package-ensure)
+(setq use-package-always-ensure t)
 
 (use-package git)
 (setq use-package-verbose t)
@@ -36,6 +36,8 @@
 
 ;; Silence compiler warnings as they can be pretty disruptive
 (setq comp-async-report-warnings-errors nil)
+(setq byte-compile-warnings '(not free-vars unresolved noruntime lexical make-local))
+(setq native-comp-async-report-warnings-errors nil)
 
 (customize-set-variable 'use-package-compute-statistics t)
 
@@ -43,14 +45,15 @@
 ;; garbage-collection
 ;; ----------------------------------------------------------------------
 
-(load "server")
-(unless (server-running-p)
-  (server-start))
+;; (load "server")
+;; (unless (server-running-p)
+;;   (server-start))
 
 (setq read-process-output-max (* 1024 1024)) ; 1MB
 (defvar my-gc 100000000) ; 100MB
 
-(setq gc-cons-threshold my-gc)
+(setq gc-cons-threshold most-positive-fixnum
+      gc-cons-percentage 0.6)
 
 (add-hook 'after-init-hook
           `(lambda ()
@@ -105,12 +108,11 @@
 ;; (set-face-attribute 'default nil
 ;;                     :family "Source Code Pro" :height 110 :width 'expanded)
 (set-face-attribute 'default nil
-                    :family "Source Code Pro" :height 115)
+                    :family "Source Code Pro" :height 105 :weight 'medium)
 (set-face-attribute 'variable-pitch nil
-                    :font "Open Sans" :height 115)
+                    :font "Open Sans" :height 105)
 
 (use-package emacs
-  :straight (emacs :type built-in)
   :config
   (blink-cursor-mode -1)
   (scroll-bar-mode -1)
@@ -145,6 +147,9 @@
   (setq buffer-file-coding-system 'utf-8
         coding-system-for-read 'utf-8
         coding-system-for-write 'utf-8)
+
+  ;; focus help window
+  (setq help-window-select t)
 
   (setq history-length t
         history-delete-duplicates t)
@@ -208,18 +213,27 @@
 (define-key minibuffer-local-completion-map [escape] 'minibuffer-keyboard-quit)
 (define-key minibuffer-local-must-match-map [escape] 'minibuffer-keyboard-quit)
 (define-key minibuffer-local-isearch-map [escape] 'minibuffer-keyboard-quit)
+(global-set-key (kbd "<escape>") 'keyboard-escape-quit)
 
+
+;; ----------------------------------------------------------------------
+;; restart emacs
+;; ----------------------------------------------------------------------
+
+(use-package restart-emacs
+  :config
+  (setq restart-emacs-restore-frames t))
 
 ;; ----------------------------------------------------------------------
 ;; edgar theme
 ;; ----------------------------------------------------------------------
 
-(use-package edgar-theme
-  :straight (edgar-theme
-             :local-repo "~/.emacs.d/lisp/edgar-theme"
-             :type nil)
-  :config
-  (load-theme 'edgar t))
+;; (use-package edgar-theme
+;;   :straight (edgar-theme
+;;              :local-repo "~/.emacs.d/lisp/edgar-theme"
+;;              :type nil)
+;;   :config
+;;   (load-theme 'edgar t))
 
 ;; ----------------------------------------------------------------------
 ;; avy
@@ -356,7 +370,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package dired
-  :straight (dired :type built-in)
+  :ensure nil
   :bind (("C-S-d d" . dired)
          ("C-S-d j" . dired-jump))
   :custom
@@ -477,7 +491,7 @@ Functions are differentiated into special forms, built-in functions and
 (use-package highlight-quoted)
 
 (use-package elisp-mode
-  :straight (elisp-mode :type built-in)
+  :ensure nil
   :custom
   (font-lock-maximum-decoration t)
   (debugger-stack-frame-as-list t)
@@ -717,7 +731,6 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 
 
 (use-package vertico
-  :load-path "straight/build/vertico/extensions"
   ;; :straight (vertico :files (:defaults "extensions/*")
   ;;                    :includes (vertico-buffer
   ;;                               vertico-directory
@@ -772,7 +785,8 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 
   (setq read-extended-command-predicate
         #'command-completion-default-include-p)
-  (setq enable-recursive-minibuffers t))
+  (setq enable-recursive-minibuffers t)
+  (minibuffer-depth-indicate-mode))
 
 (use-package marginalia
   :bind (:map minibuffer-local-map
@@ -825,6 +839,7 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
          :map isearch-mode-map
          ("C-e" . consult-isearch-history)
          ("C-l" . consult-line)
+         ([remap isearch-abort] . isearch-cancel)
          ("C-." . isearch-forward-symbol-at-point)
          ("C-o" . isearch-occur)
          ("C-S-s" . consult-line)
@@ -848,7 +863,7 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
   (advice-add #'register-preview :override #'consult-register-window)
 
   ;; Optionally replace `completing-read-multiple' with an enhanced version.
-  (advice-add #'completing-read-multiple :override #'consult-completing-read-multiple)
+  ;; (advice-add #'completing-read-multiple :override #'consult-completing-read-multiple)
 
   ;; Use Consult to select xref locations with preview
   (setq xref-show-xrefs-function #'consult-xref
@@ -1047,10 +1062,10 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
   :init
   (add-hook 'prog-mode-hook 'git-gutter-mode)
   (add-hook 'org-mode-hook 'git-gutter-mode)
-  :bind (("C-s-v n" . git-gutter:next-hunk)
-         ("C-s-v p" . git-gutter:previous-hunk)
-         ("C-s-v o" . git-gutter:popup-hunk)
-         ("C-s-v r" . git-gutter:revert-hunk))
+  :bind (("C-S-v n" . git-gutter:next-hunk)
+         ("C-S-v p" . git-gutter:previous-hunk)
+         ("C-S-v o" . git-gutter:popup-hunk)
+         ("C-S-v r" . git-gutter:revert-hunk))
   :custom
   (git-gutter:modified-sign ">")
   (git-gutter:added-sign "+")
@@ -1063,10 +1078,6 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 ;; ----------------------------------------------------------------------
 ;; org
 ;; ----------------------------------------------------------------------
-
-;; (use-package olivetti
-;;   :config
-;;   (add-hook 'text-mode 'olivetti-mode))
 
 (use-package org
   :mode ("\\.org\\'" . org-mode)
@@ -1082,8 +1093,12 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
   (org-document-title ((t (:foreground "#171717" :weight bold :height 1.5))))
   :config
   (progn
-    (setq org-directory "/home/edgar/Notes")
-    (setq org-agenda-files (directory-files-recursively (concat org-directory "/Agenda/") "\.org$"))
+
+    (setq org-cite-export-processors '((latex natbib)
+                                       (t basic)))
+
+    (setq org-directory "/home/edgar/org")
+    (setq org-agenda-files (directory-files-recursively (concat org-directory "/agenda/") "\.org$"))
     (setq org-log-done 'time)
     (setq org-agenda-show-all-dates nil)
     (setq org-capture-templates
@@ -1180,6 +1195,99 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
                                  '((emacs-lisp . t)
                                    (python . t)))
 
+    ;; scale text in latex preview
+    (plist-put org-format-latex-options :scale 0.6)
+
+    ;; ---- toggle latex fragments ----
+
+    (defvar org-latex-fragment-last nil
+      "Holds last fragment/environment you were on.")
+
+    (defun my/org-latex-fragment--get-current-latex-fragment ()
+      "Return the overlay associated with the image under point."
+      (car (--select (eq (overlay-get it 'org-overlay-type) 'org-latex-overlay) (overlays-at (point)))))
+
+    (defun my/org-in-latex-fragment-p ()
+      "Return the point where the latex fragment begins, if inside
+  a latex fragment. Else return false"
+      (let* ((el (org-element-context))
+             (el-type (car el)))
+        (and (or (eq 'latex-fragment el-type) (eq 'latex-environment el-type))
+             (org-element-property :begin el))))
+
+    (defun org-latex-fragment-toggle-auto ()
+      ;; Wait for the s
+      (interactive)
+      (while-no-input
+        (run-with-idle-timer 0.05 nil 'org-latex-fragment-toggle-helper)))
+
+    (defun org-latex-fragment-toggle-helper ()
+      "Toggle a latex fragment image "
+      (condition-case nil
+          (and (eq 'org-mode major-mode)
+               (let* ((begin (my/org-in-latex-fragment-p)))
+                 (cond
+                  ;; were on a fragment and now on a new fragment
+                  ((and
+                    ;; fragment we were on
+                    org-latex-fragment-last
+                    ;; and are on a fragment now
+                    begin
+                    ;; but not on the last one this is a little tricky. as you edit the
+                    ;; fragment, it is not equal to the last one. We use the begin
+                    ;; property which is less likely to change for the comparison.
+                    (not (= begin
+                            org-latex-fragment-last)))
+                   ;; go back to last one and put image back
+                   (save-excursion
+                     (goto-char org-latex-fragment-last)
+                     (when (my/org-in-latex-fragment-p) (org-toggle-latex-fragment))
+                     ;; now remove current imagea
+                     (goto-char begin)
+                     (let ((ov (my/org-latex-fragment--get-current-latex-fragment)))
+                       (when ov
+                         (delete-overlay ov)))
+                     ;; and save new fragment
+                     (setq org-latex-fragment-last begin)))
+
+                  ;; were on a fragment and now are not on a fragment
+                  ((and
+                    ;; not on a fragment now
+                    (not begin)
+                    ;; but we were on one
+                    org-latex-fragment-last)
+                   ;; put image back on
+                   (save-excursion
+                     (goto-char org-latex-fragment-last)
+                     (when (my/org-in-latex-fragment-p)(org-toggle-latex-fragment)))
+
+                   ;; unset last fragment
+                   (setq org-latex-fragment-last nil))
+
+                  ;; were not on a fragment, and now are
+                  ((and
+                    ;; we were not one one
+                    (not org-latex-fragment-last)
+                    ;; but now we are
+                    begin)
+                   (save-excursion
+                     (goto-char begin)
+                     ;; remove image
+                     (let ((ov (my/org-latex-fragment--get-current-latex-fragment)))
+                       (when ov
+                         (delete-overlay ov)))
+                     (setq org-latex-fragment-last begin)))
+                  ;; else not on a fragment
+                  ((not begin)
+                   (setq org-latex-fragment-last nil)))))
+        (error nil)))
+
+    (add-hook 'post-command-hook 'org-latex-fragment-toggle-auto)
+    (setq org-latex-fragment-toggle-helper (byte-compile 'org-latex-fragment-toggle-helper))
+    (setq org-latex-fragment-toggle-auto (byte-compile 'org-latex-fragment-toggle-auto))
+
+    ;; ---- end: toggle latex fragments ----
+
     (org-link-set-parameters
      "search-view" :follow 'my-search-view-link)
 
@@ -1200,40 +1308,9 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 
     (add-hook 'before-save-hook 'my/hash-word-to-search-view)
 
-    (defun my/org-setup ()
-      ;; (olivetti-mode 1)
-      (set-fringe-style 0)
-      ;; (setq olivetti-body-width 100)
-      )
-
-    (defun my/org-agenda-setup ()
-      ;; (olivetti-mode 1)
-      (setq org-agenda-files (directory-files-recursively (concat org-directory "/Agenda/") "\.org$"))
-      ;; (setq olivetti-body-width 100)
-      )
-
-    (setq org-todo-keyword-faces
-          '(("TODO" . (foreground "black" :background "brown2" :weight bold
-                                  :overline "white"
-                                  :box (:line-width (6 . 0) :style flat-button)))
-            ("IN-PROGRESS" . (foreground "black" :background "SeaGreen" :weight bold
-                                         :overline "white"
-                                         :box (:line-width (6 . 1) :style flat-button)))
-            ("NOTE" . (foreground "black" :background "tan4" :weight bold
-                                  :overline "white"
-                                  :box (:line-width (6 . 1) :color ,orange-1 :style flat-button)))
-            ("WAITING" . (foreground "black" :background "orange3" :weight bold
-                                     :overline "white"
-                                     :box (:line-width (6 . 1) :style flat-button)))
-            ("DONE" . (foreground "black" :background "DimGrey" :weight bold
-                                  :overline "white"
-                                  :box (:line-width (6 . 1) :style flat-button)))))
     (setq org-priority-faces '((?A . (:background "DimGrey" :weight bold))
                                (?B . (:background "DimGrey" :weight bold))
                                (?C . (:background "DimGrey" :weight bold))))
-
-    (add-hook 'org-mode-hook 'my/org-setup)
-    (add-hook 'org-agenda-mode-hook 'my/org-agenda-setup)
     ))
 
 ;; (use-package org-bullets
@@ -1243,6 +1320,150 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 ;;             (lambda ()
 ;;               (org-bullets-mode 1)))
 ;;   (setq org-bullets-bullet-list '("●" "○" "■" "□")))
+
+;; interactively toggle visibility of org elements on entering and leaving
+(use-package org-appear
+  :after org
+  :config
+  (setq org-link-descriptive t)
+  (setq org-appear-autolinks t)
+  (add-hook 'org-mode-hook 'org-appear-mode))
+
+
+
+(require 'oc)
+(setq org-cite-global-bibliography '("/home/edgar/org/marxism/biblio/library/library.bib"))
+(setq org-cite-export-processors
+      '((md . (csl "chicago-fullnote-bibliography.csl"))   ; Footnote reliant
+        (latex . biblatex)                                 ; For humanities
+        (odt . (csl "chicago-fullnote-bibliography.csl"))  ; Footnote reliant
+        (t . (csl "modern-language-association.csl"))      ; Fallback
+        ))
+
+
+;; provides a completing-read front-end to browse and act on BibTeX, BibLaTeX,
+;; and CSL JSON bibliographic data, and LaTeX, markdown, and org-cite editing support.
+(use-package citar
+  ;;  :after org-cite
+  :bind (:map org-mode-map
+              ("C-c c i" . org-cite-insert)
+              ("C-c c r" . citar-insert-reference)
+              ("C-c c n" . citar-open-notes))
+  :custom
+  (org-cite-global-bibliography '("/home/edgar/org/marxism/biblio/library/library.bib"))
+  (org-cite-insert-processor 'citar)
+  (org-cite-follow-processor 'citar)
+  (org-cite-activate-processor 'citar)
+  (citar-bibliography org-cite-global-bibliography))
+
+
+(defun my/org-roam-node-from-cite (citekeys &optional entry)
+  "Create an org-node note from a CITEKEYS and ENTRY."
+  (interactive (list (citar-select-ref :filter nil)))
+  (let ((title (with-temp-buffer
+                 (insert (citar-format--entry "${author editor} :: ${title}"
+                                              (or entry (citar-get-entry citekeys))))
+                 (buffer-string))))
+    (org-roam-capture- :templates
+                       '(("r" "reference" plain "%?" :if-new
+                          (file+head "${citekey}.org"
+                                     ":PROPERTIES:
+:ROAM_REFS: [cite:@${citekey}]
+:END:
+#+title: ${title}\n")
+                          :immediate-finish t
+                          :unnarrowed t))
+                       :info (list :citekey citekeys)
+                       :node (org-roam-node-create :title title)
+                       :props '(:finalize find-file))))
+
+
+
+
+(use-package citar-embark
+  :after citar embark
+  :no-require
+  :config (citar-embark-mode))
+
+;; An emacs package to provide tighter Citar and Org-Roam integration
+(use-package citar-org-roam
+  :after citar org-roam
+  :no-require
+  :config (citar-org-roam-mode))
+
+
+(use-package pdf-tools
+  :bind (:map pdf-view-mode-map
+              ("C-s" . isearch-forward))
+  :config
+  (pdf-tools-install-noverify)
+  (setq-default pdf-view-display-size 'fit-width)
+  (setq pdf-view-use-scaling t
+        pdf-view-use-imagemagick nil)
+  :custom
+  (pdf-annot-activate-created-annotations t "automatically annotate highlights"))
+
+(setq TeX-view-program-selection '((output-pdf "PDF Tools"))
+      TeX-view-program-list '(("PDF Tools" TeX-pdf-tools-sync-view))
+      TeX-source-correlate-start-server t)
+
+(add-hook 'TeX-after-compilation-finished-functions
+          #'TeX-revert-document-buffer)
+
+(use-package org-noter
+  :config
+  (setq org-noter-notes-search-path (list org-directory))
+  (setq org-noter-auto-save-last-location t
+        org-noter-separate-notes-from-heading t))
+
+(use-package org-pdftools
+  :init
+  (defun +org--pdftools-link-handler (fn &rest args)
+    "Produces a link handler for org-pdftools that suppresses missing-epdfinfo errors whenever storing or exporting links."
+    (lambda (&rest args)
+      (and (ignore-errors (require 'org-pdftools nil t))
+           (file-executable-p pdf-info-epdfinfo-program)
+           (apply fn args))))
+  (org-link-set-parameters (or (bound-and-true-p org-pdftools-link-prefix) "pdf")
+                           :follow   (+org--pdftools-link-handler #'org-pdftools-open)
+                           :complete (+org--pdftools-link-handler #'org-pdftools-complete-link)
+                           :store    (+org--pdftools-link-handler #'org-pdftools-store-link)
+                           :export   (+org--pdftools-link-handler #'org-pdftools-export))
+  :hook (org-mode . org-pdftools-setup-link))
+
+(use-package org-noter-pdftools
+  :after org-noter
+  :config
+  ;; Add a function to ensure precise note is inserted
+  (defun org-noter-pdftools-insert-precise-note (&optional toggle-no-questions)
+    (interactive "P")
+    (org-noter--with-valid-session
+     (let ((org-noter-insert-note-no-questions (if toggle-no-questions
+                                                   (not org-noter-insert-note-no-questions)
+                                                 org-noter-insert-note-no-questions))
+           (org-pdftools-use-isearch-link t)
+           (org-pdftools-use-freepointer-annot t))
+       (org-noter-insert-note (org-noter--get-precise-info)))))
+
+  ;; fix https://github.com/weirdNox/org-noter/pull/93/commits/f8349ae7575e599f375de1be6be2d0d5de4e6cbf
+  (defun org-noter-set-start-location (&optional arg)
+    "When opening a session with this document, go to the current location.
+With a prefix ARG, remove start location."
+    (interactive "P")
+    (org-noter--with-valid-session
+     (let ((inhibit-read-only t)
+           (ast (org-noter--parse-root))
+           (location (org-noter--doc-approx-location (when (called-interactively-p 'any) 'interactive))))
+       (with-current-buffer (org-noter--session-notes-buffer session)
+         (org-with-wide-buffer
+          (goto-char (org-element-property :begin ast))
+          (if arg
+              (org-entry-delete nil org-noter-property-note-location)
+            (org-entry-put nil org-noter-property-note-location
+                           (org-noter--pretty-print-location location))))))))
+  (with-eval-after-load 'pdf-annot
+    (add-hook 'pdf-annot-activate-handler-functions #'org-noter-pdftools-jump-to-note)))
+
 
 (use-package org-ql
   :after org
@@ -1292,78 +1513,54 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 
 (setq package-check-signature nil)
 
-(use-package org-ref
-  :after org
-  :commands (org-ref-insert-link org-ref-insert-cite-function org-ref-insert-ref-function org-ref-insert-label-function)
-  :init
-  (setq reftex-default-bibliography '("~/Documents/Economics/Economics.bib"))
-  (setq org-ref-default-bibliography '("~/Documents/Economics/Economics.bib"))
-  (setq org-ref-pdf-directory '("~/Documents/Economics/files/"))
-
-  (setq bibtex-completion-bibliography "~/Documents/Economics/Economics.bib"
-        bibtex-completion-library-(point)ath "~/Documents/Economics/files/"
-        ;; bibtex-completion-notes-path "~/Dropbox/bibliography/bibtex-notes"
-        ))
-
-;; (use-package org-roam
-;;   :diminish org-roam-mode
+;; (use-package org-ref
 ;;   :after org
-;;   :hook
-;;   (org-mode . org-roam-mode)
-;;   :custom
-;;   (org-roam-directory (concat org-directory "/Roam"))
-;;   :bind (:map org-roam-mode-map
-;;               (("C-c n l" . org-roam)
-;;                ("C-c n f" . org-roam-find-file)
-;;                ("C-c n g" . org-roam-graph))
-;;               :map org-mode-map
+;;   :commands (org-ref-insert-link org-ref-insert-cite-function org-ref-insert-ref-function org-ref-insert-label-function)
+;;   :init
+;;   (setq reftex-default-bibliography '("~/Documents/Economics/Economics.bib"))
+;;   (setq org-ref-default-bibliography '("~/Documents/Economics/Economics.bib"))
+;;   (setq org-ref-pdf-directory '("~/Documents/Economics/files/"))
 
-;;               (("C-c n i" . org-roam-insert))
-;;               (("C-c n I" . org-roam-insert-immediate)))
-;;   :config
-;;   (setq org-roam-buffer-width 0.4)
-;;   (setq org-roam-link-title-format "{{%s}}")
-;;   (setq org-roam-templates
-;;         '(("default" (:file org-roam--file-name-timestamp-title
-;;                             :content "#+TITLE: ${title} \n")))))
+;;   (setq bibtex-completion-bibliography "~/Documents/Economics/Economics.bib"
+;;         bibtex-completion-library-(point)ath "~/Documents/Economics/files/"
+;;         ;; bibtex-completion-notes-path "~/Dropbox/bibliography/bibtex-notes"
+;;         ))
+
+(use-package org-roam
+  :after org
+  :custom
+  (org-roam-directory (concat org-directory "/marxism"))
+  (org-roam-completion-everywhere t)
+  :bind (("C-c n l" . org-roam)
+         ("C-c n f" . org-roam-find-file)
+         ("C-c n g" . org-roam-graph)
+         ("C-c n i" . org-roam-insert))
+  :config
+  (org-roam-db-autosync-mode))
 
 ;; download web pages to org
 (use-package org-web-tools
   :bind (:map org-mode-map
               ("C-S-o w" . org-web-tools-insert-link-for-url)
-              ("C-s-o u" . org-web-tools-insert-web-page-as-entry)))
+              ("C-S-o u" . org-web-tools-insert-web-page-as-entry)))
 
 ;; drag and drop images to org
 (use-package org-download
   :bind ("C-S-o i" . org-download-image)
   :config
-  (setq-default org-download-image-dir "~/Notes/Roam/images")
+  (setq-default org-download-image-dir (concat org-directory "/marxism/images"))
   :hook (dired-mode . org-download-enable))
 
 (use-package org-journal
   :after org
   :config
-  (setq org-journal-dir "~/Notes/Agenda/"))
+  (setq org-journal-dir "~/org/agenda"))
 
 ;; ----------------------------------------------------------------------
 ;; pdf-tools
 ;; ----------------------------------------------------------------------
 
-(use-package pdf-tools
-  :bind (:map pdf-view-mode-map
-              ("C-s" . isearch-forward))
-  :config
-  (pdf-tools-install)
-  (setq-default pdf-view-display-size 'fit-width)
-  :custom
-  (pdf-annot-activate-created-annotations t "automatically annotate highlights"))
 
-(setq TeX-view-program-selection '((output-pdf "PDF Tools"))
-      TeX-view-program-list '(("PDF Tools" TeX-pdf-tools-sync-view))
-      TeX-source-correlate-start-server t)
-
-(add-hook 'TeX-after-compilation-finished-functions
-          #'TeX-revert-document-buffer)
 
 ;; ----------------------------------------------------------------------
 ;; latex
@@ -1559,6 +1756,9 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 ;;           ))
 ;;   (modus-themes-load-vivendi))
 
+(use-package ef-themes
+  :config (load-theme 'ef-autumn :no-confirm))
+
 ;; ----------------------------------------------------------------------
 ;; treemacs
 ;; ----------------------------------------------------------------------
@@ -1682,7 +1882,6 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 ;; ----------------------------------------------------------------------
 
 (use-package emacs
-  :straight (emacs :type built-in)
   :config
 
   (defun my-open-line ()
@@ -1714,6 +1913,13 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
     (unless (looking-at-p "(.*")
       (my/prev-begin-sexp))
     (kill-sexp))
+
+  (defadvice kill-region (before slick-cut activate compile)
+    "When called interactively with no active region, kill a single line instead."
+    (interactive
+     (if mark-active (list (region-beginning) (region-end))
+       (list (line-beginning-position)
+             (line-beginning-position 2)))))
 
   (defun my/html-to-org ()
     (interactive)
@@ -1764,14 +1970,14 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 
   (defhydra hydra-info (:hint nil)
     "
-    Info-mode:
-    [_j_] forward    [_l_] last      [_u_] up          [_f_] follow reference  [_T_] TOC
-    [_k_] backward   [_r_] return    [_m_] menu        [_i_] index             [_d_] directory
-    [_n_] nex        [_H_] history   [_g_] goto        [_,_] next index item   [_c_] copy node name
-    [_p_] prev       [_<_] top       [_b_] beginning   [_I_] virtual index     [_C_] clone buffer
-    [_s_] search     [_>_] final     [_e_] end         ^^                      [_a_] apropos
+   Info-mode:
+   [_j_] forward   [_l_] last     [_u_] up         [_f_] follow reference  [_T_] TOC
+   [_k_] backward  [_r_] return   [_m_] menu       [_i_] index             [_d_] directory
+   [_n_] nex       [_H_] history  [_g_] goto       [_,_] next index item   [_c_] copy node name
+   [_p_] prev      [_<_] top      [_b_] beginning  [_I_] virtual index     [_C_] clone buffer
+   [_s_] search    [_>_] final    [_e_] end        ^^                      [_a_] apropos
 
-    [_1_] .. [_9_] Pick first .. ninth item in the node's menu.
+   [_1_] .. [_9_] Pick first .. ninth item in the node's menu.
   "
 
     ("j"   Info-forward-node)
@@ -1857,7 +2063,7 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 ;; ----------------------------------------------------------------------
 
 (use-package window
-  :straight (window :type built-in)
+  :ensure nil
   :bind (("C-S-w v" . split-window-right)
          ("C-S-w b" . split-window-below)
          ("C-S-w +" . enlarge-window)
@@ -1885,7 +2091,7 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
   :bind ("C-S-b s" . ibuffer-sidebar-toggle-sidebar))
 
 (use-package uniquify
-  :straight (uniquify :type built-in)
+  :ensure nil
   :config
   (setq uniquify-buffer-name-style 'forward)
   (setq uniquify-separator "/")
@@ -1900,7 +2106,7 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 ;; ----------------------------------------------------------------------
 
 (use-package files
-  :straight (files :type built-in)
+  :ensure nil
   :bind (("C-S-f s" . save-buffer)
          ("C-S-f f" . find-file)
          ("C-S-f w" . write-file)))
@@ -1910,7 +2116,7 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 ;; ----------------------------------------------------------------------
 
 (use-package lisp
-  :straight (lisp :type built-in)
+  :ensure nil
   :bind (("C-S-e f" . mark-defun)
          ("C-S-e s" . mark-sexp)))
 
@@ -1918,7 +2124,7 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
   :bind ("C-S-e i" . ielm))
 
 (use-package elisp-mode
-  :straight (elisp-mode :type built-in)
+  :ensure nil
   :bind (:map emacs-lisp-mode-map
               ("C-S-e e" . eval-last-sexp)
               ("C-S-e r" . eval-region)
@@ -1926,7 +2132,7 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
               ("C-S-e d" . eval-defun)))
 
 (use-package edebug
-  :bind (:map macs-lisp-mode-map
+  :bind (:map emacs-lisp-mode-map
               ("C-S-e b" . edebug-defun)))
 
 ;; ----------------------------------------------------------------------
