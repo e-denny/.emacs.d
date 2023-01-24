@@ -109,8 +109,8 @@
 ;;                     :family "Source Code Pro" :height 110 :width 'expanded)
 (set-face-attribute 'default nil
                     :family "Source Code Pro" :height 105 :weight 'medium)
-(set-face-attribute 'variable-pitch nil
-                    :font "Open Sans" :height 105)
+;; (set-face-attribute 'variable-pitch nil
+;;                     :font "Open Sans" :height 105)
 
 (use-package emacs
   :config
@@ -325,20 +325,20 @@
   :config
   (add-to-list 'corfu-margin-formatters #'kind-icon-margin-formatter))
 
-(use-package corfu-doc
-  :load-path "lisp/corfu-doc"
-  :after corfu
-  :bind (:map corfu-map
-              ([remap corfu-show-documentation] . corfu-doc-toggle)
-              ("M-d" . corfu-doc-toggle)
-              ("M-n" . corfu-doc-scroll-up)
-              ("M-p" . corfu-doc-scroll-down))
-  :custom
-  (corfu-doc-delay 1.0)
-  (corfu-doc-max-width 70)
-  (corfu-doc-max-height 20)
-  (corfu-echo-documentation nil)
-  :hook (corfu-mode . corfu-doc-mode))
+;; (use-package corfu-doc
+;;   :load-path "lisp/corfu-doc"
+;;   :after corfu
+;;   :bind (:map corfu-map
+;;               ([remap corfu-show-documentation] . corfu-doc-toggle)
+;;               ("M-d" . corfu-doc-toggle)
+;;               ("M-n" . corfu-doc-scroll-up)
+;;               ("M-p" . corfu-doc-scroll-down))
+;;   :custom
+;;   (corfu-doc-delay 1.0)
+;;   (corfu-doc-max-width 70)
+;;   (corfu-doc-max-height 20)
+;;   (corfu-echo-documentation nil)
+;;   :hook (corfu-mode . corfu-doc-mode))
 
 
 (use-package dabbrev
@@ -730,36 +730,20 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 ;;   (all-the-icons-completion-mode))
 
 
-(use-package vertico
-  ;; :straight (vertico :files (:defaults "extensions/*")
-  ;;                    :includes (vertico-buffer
-  ;;                               vertico-directory
-  ;;                               vertico-flat
-  ;;                               vertico-indexed
-  ;;                               vertico-mouse
-  ;;                               vertico-quick
-  ;;                               vertico-repeat
-  ;;                               vertico-reverse))
-  :bind (:map vertico-map
-              ("<tab>" . vertico-insert)                ; insert selected candidate
-              ("<escape>" . minibuffer-keyboard-quit)   ; close minibuffer
-              ;; cycle through candidate groups
-              ("C-M-n" . vertico-next-group)
-              ("C-M-p" . vertico-previous-group))
-  :init
-  (vertico-mode)
-  ;; Show more candidates
-  (setq vertico-count 20)
-  ;; Grow and shrink the Vertico minibuffer
-  (setq vertico-resize t)
-  (setq vertico-cycle t)
-  ;; (require 'vertico-buffer)
-  ;; (vertico-buffer-mode)
-  ;; (setq vertico-buffer-display-action `(display-buffer-in-direction
-  ;;                                       (direction . down)
-  ;;                                       (window-height . ,(+ 3 vertico-count))
-  ;;                                       ))
-  )
+ (use-package vertico
+   :bind (:map vertico-map
+               ("<tab>" . vertico-insert)                ; insert selected candidate
+               ("<escape>" . minibuffer-keyboard-quit)   ; close minibuffer
+               ;; cycle through candidate groups
+               ("C-M-n" . vertico-next-group)
+               ("C-M-p" . vertico-previous-group))
+   :init
+   (vertico-mode)
+   ;; Show more candidates
+   (setq vertico-count 20)
+   ;; Grow and shrink the Vertico minibuffer
+   (setq vertico-resize t)
+   (setq vertico-cycle t))
 
 (use-package orderless
   :init
