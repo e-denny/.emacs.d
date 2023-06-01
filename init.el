@@ -7,6 +7,7 @@
 ;;; Package system
 
 (require 'package)
+(require 'cl-lib)
 
 (setq package-archives
       '(("melpa" . "https://melpa.org/packages/")
@@ -99,7 +100,7 @@
 ;;   (epa-file-enable)
 ;;   (setq epg-gpg-program "gpg")
 
-;;   (load-if-exists "~/.emacs.d/secrets.el.gpg")
+;;   (load-if-exists "~/.emas.d/secrets.el.gpg")
 ;;   (load-if-exists "~/.emacs.d/secrets.el")
 
 (add-to-list 'initial-frame-alist '(fullscreen . fullheight))
@@ -200,7 +201,10 @@
   :hook ((prog-mode . flymake-mode)
          (before-save . whitespace-cleanup)
          (text-mode . turn-on-visual-line-mode))
-  :bind (("C-S-b e" . eval-buffer)
+  :bind (("<copy>" .  kill-ring-save)
+         ("<paste>" . yank)
+         ("<cut>" . kill-region)
+         ("C-S-b e" . eval-buffer)
          ("C-S-b k" . kill-buffer)))
 
 ;; Search (and search/replace) using regex by default
@@ -286,8 +290,6 @@
               ("<return>" . corfu-insert)
               ("M-l" . corfu-show-location))
   :custom
-  ;; Works with `indent-for-tab-command'. Make sure tab doesn't indent when you
-  ;; want to perform completion
   (tab-always-indent 'complete)
   (completion-cycle-threshold nil)      ; Always show all candidates in popup menu
   (corfu-cycle t)
@@ -301,19 +303,12 @@
   (corfu-preselect-first t)
   (corfu-min-width 60)
   (corfu-max-width corfu-min-width)
-  (corfu-separator ?\s)                 ; Necessary for use with orderless
+  (corfu-separator ?\s)
   (corfu-quit-no-match 'separator)
-  (corfu-preview-current 'insert)       ; Preview current candidate?
-  (corfu-preselect-first t)             ; Preselect first candidate?
+  (corfu-preview-current 'insert)
+  (corfu-preselect-first t)
   :init
-  ;; FIXME: has this changed?
-  (global-corfu-mode)
-  :config
-  ;; (defun my/corfu-setup-lsp ()
-  ;;   "Use orderless completion style with lsp-capf instead of the default lsp-passthrough."
-  ;;   (setf (alist-get 'styles (alist-get 'lsp-capf completion-category-defaults))
-  ;;         '(orderless)))
-  :hook (lsp-completion-mode . my/corfu-setup-lsp))
+  (global-corfu-mode))
 
 (use-package kind-icon
   :after corfu
@@ -355,15 +350,12 @@
          ("C-S-c i" . cape-ispell))
   :config
   ;; Use Company backends as Capfs.
-  (setq-local completion-at-point-functions
-              (mapcar #'cape-company-to-capf
-                      (list #'company-files #'company-ispell #'company-dabbrev))))
-
-;; (use-package emacs
-;;   :init
-;;   (setq completion-cycle-threshold 3)
-;;   (setq read-extended-command-predicate
-;;         #'command-completion-default-include-p))
+  (add-to-list 'completion-at-point-functions #'cape-file)
+  (add-to-list 'completion-at-point-functions #'cape-dabbrev)
+  ;; (setq-local completion-at-point-functions
+  ;;             (mapcar #'cape-company-to-capf
+  ;;                     (list #'company-files #'company-ispell #'company-dabbrev)))
+  )
 
 ;; ----------------------------------------------------------------------
 ;; dired
@@ -537,6 +529,7 @@ Functions are differentiated into special forms, built-in functions and
 ;; M-, pop back to prevous marks
 (use-package elisp-slime-nav
   :diminish
+  ;; FIXME: this does not work
   :bind ("C-S-h v" . elisp-slime-nav-describe-elisp-thing-at-point)
   :hook ((emacs-lisp-mode ielm-mode lisp-interaction-mode) . elisp-slime-nav-mode))
 
@@ -554,12 +547,11 @@ Functions are differentiated into special forms, built-in functions and
          (lisp-mode . smartparens-mode)
          (ielm-mode . smartparens-mode)
          (eval-expression-minibuffer-setup . smartparens-mode))
-  ;; FIXME: this is not working
   :bind (:map smartparens-mode-map
-              ("C-S-)" . sp-forward-slurp-sexp)
-              ("C-S-(" . sp-backward-slurp-sexp)
-              ("C-S-}" . sp-forward-barf-sexp)
-              ("C-S-{" . sp-backward-barf-sexp)))
+              ("C-S-c )" . sp-forward-slurp-sexp)
+              ("C-S-c (" . sp-backward-slurp-sexp)
+              ("C-S-c }" . sp-forward-barf-sexp)
+              ("C-S-c {" . sp-backward-barf-sexp)))
 
 (use-package highlight-parentheses
   :diminish highlight-parentheses-mode
@@ -577,6 +569,27 @@ Functions are differentiated into special forms, built-in functions and
 (use-package eros
   :init (eros-mode t))
 
+(use-package lispy
+  :hook ((lisp-mode . lispy-mode)
+         (emacs-lisp-mode . lispy-mode)
+         (ielm-mode . lispy-mode))
+  :config
+  (setq lispy-close-quotes-at-end-p t)
+  (add-hook 'lispy-mode-hook #'turn-off-smartparens-mode)
+
+  ;; (when (modulep! :lang emacs-lisp)
+  ;;   (setq lispy-outline
+  ;;         (concat
+  ;;          ;; `lispy-mode' requires `lispy-outline' start with ^
+  ;;          (unless (string-prefix-p "^" +emacs-lisp-outline-regexp) "^")
+  ;;          +emacs-lisp-outline-regexp))
+  ;;   (advice-add #'lispy-outline-level :override #'+emacs-lisp-outline-level))
+  )
+
+
+(with-eval-after-load "lispy"
+  (define-key lispy-mode-map (kbd "<f14>") 'my/lispy-cheat-sheet/body))
+
 ;; ----------------------------------------------------------------------
 ;; common-lisp
 ;; ----------------------------------------------------------------------
@@ -593,24 +606,27 @@ Functions are differentiated into special forms, built-in functions and
   ;;           (lambda ()
   ;;             (unless (sly-connected-p)
   ;;               (save-excursion (sly)))))
+  (setq-default sly-symbol-completion-mode nil)
   (setq sly-kill-without-query-p t
         sly-net-coding-system 'utf-8-unix
-        sly-complete-symbol-function 'sly-simple-completions)
+        ;; sly-complete-symbol-function 'sly-simple-completions
+        )
 
   ;; FIXME: switch off orderless for sly - need to find better fix
-  (defun my-sly-completion ()
-    (setq-local completion-at-point-functions
-                (list
-                 (cape-company-to-capf
-                  (apply-partially #'company--multi-backend-adapter
-                                   '(sly-complete-symbol company-dabbrev)))))
-    (setq-local completion-styles '(basic)))
+  ;; (defun my-sly-completion ()
+  ;;   (setq-local completion-at-point-functions
+  ;;               (list
+  ;;                (cape-company-to-capf
+  ;;                 (apply-partially #'company--multi-backend-adapter
+  ;;                                  '(sly-complete-symbol company-dabbrev)))))
+  ;;   (setq-local completion-styles '(basic)))
 
-  (defun turn-off-sly-symbol-completion-mode ()
-    (sly-symbol-completion-mode -1))
+  ;; (defun turn-off-sly-symbol-completion-mode ()
+  ;;   (sly-symbol-completion-mode -1))
   :hook
-  ((sly-mode . turn-off-sly-symbol-completion-mode)
-   (sly-mode . my-sly-completion)
+  (
+   ;; (sly-mode . turn-off-sly-symbol-completion-mode)
+   ;; (sly-mode . my-sly-completion)
    (lisp-mode-hook . sly-editing-mode)))
 
 
@@ -757,8 +773,6 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 
 (use-package emacs
   :init
-  ;; Add prompt indicator to `completing-read-multiple'.
-  ;; Alternatively try `consult-completing-read-multiple'.
   (defun crm-indicator (args)
     (cons (concat "[CRM] " (car args)) (cdr args)))
   (advice-add #'completing-read-multiple :filter-args #'crm-indicator)
@@ -783,33 +797,36 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
   )
 
 (use-package consult
-  :bind (("C-S-b b" . consult-buffer)
-         ("C-S-b o" . consult-buffer-other-window)
+  :bind (
+         ([remap switch-to-buffer] . consult-buffer)
+         ;;        ("C-S-b o" . consult-buffer-other-window)
 
-         ("M-S-s f" . consult-find)
-         ("M-S-s F" . consult-locate)
-         ("M-S-s g" . consult-grep)
-         ("M-S-s G" . consult-git-grep)
-         ("M-S-s r" . consult-ripgrep)
-         ("M-S-s l" . consult-line)
-         ("M-S-s L" . consult-line-multi)
-         ("M-S-s m" . consult-multi-occur)
-         ("M-S-s k" . consult-keep-lines)
-         ("M-S-s u" . consult-focus-lines)
-         ("M-S-s e" . consult-isearch-history)
+         ;;        ;; FIXME: these bindings do not work
+         ;;        ("M-S-s f" . consult-find)
+         ;;        ("M-S-s F" . consult-locate)
+         ;;        ("M-S-s g" . consult-grep)
+         ;;        ("M-S-s G" . consult-git-grep)
+         ;;        ("M-S-s r" . consult-ripgrep)
+         ;;        ("M-S-s l" . consult-line)
+         ;;        ("M-S-s L" . consult-line-multi)
+         ;;        ("M-S-s m" . consult-multi-occur)
+         ;;        ("M-S-s k" . consult-keep-lines)
+         ;;        ("M-S-s u" . consult-focus-lines)
+         ;;        ("M-S-s e" . consult-isearch-history)
 
 
-         ("s-b h" . consult-history)
-         ;; ("C-c m" . consult-mode-command)
-         ;; ("s-m b" . consult-bookmark)
-         ;; ("C-c k" . consult-kmacro)
-         ;; ("C-x M-:" . consult-complex-command)
-         ;; ("C-x 5 b" . consult-buffer-other-frame)
-         ;; ("M-#" . consult-register-load)
-         ;; ("M-'" . consult-register-store)
-         ;; ("C-M-#" . consult-regi)
-         ;; ("M-y" . consult-yank-pop)
-         ("<help> a" . consult-apropos)
+         ;;        ("s-b h" . consult-history)
+         ;;        ;; ("C-c m" . consult-mode-command)
+         ;;        ;; ("s-m b" . consult-bookmark)
+         ([remap bookmark-jump] . consult-bookmark)
+         ;;        ;; ("C-c k" . consult-kmacro)
+         ;;        ;; ("C-x M-:" . consult-complex-command)
+         ;;        ;; ("C-x 5 b" . consult-buffer-other-frame)
+         ;;        ;; ("M-#" . consult-register-load)
+         ;;        ;; ("M-'" . consult-register-store)
+         ;;        ;; ("C-M-#" . consult-regi)
+         ;;        ;; ("M-y" . consult-yank-pop)
+         ;;        ("<help> a" . consult-apropos)
 
          ("C-S-g e" . consult-compile-error)
          ("C-S-g f" . consult-flymake)
@@ -820,13 +837,13 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
          ("C-S-g i" . consult-imenu)
          ("C-S-g I" . consult-imenu-multi)
 
-         :map isearch-mode-map
-         ("C-e" . consult-isearch-history)
+         ;;        :map isearch-mode-map
+         ;; ("C-e" . consult-isearch-history)
          ("C-l" . consult-line)
          ([remap isearch-abort] . isearch-cancel)
          ("C-." . isearch-forward-symbol-at-point)
          ("C-o" . isearch-occur)
-         ("C-S-s" . consult-line)
+         ;; FIXME: no such pogram as 'rg'
          ("C-M-g" . consult-ripgrep)
          ("C-M-l" . consult-line-multi))
 
@@ -861,17 +878,18 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
   ;; (s etq consult-preview-key (list (kbd "<S-down>") (kbd "<S-up>")))
   ;; For some commands and buffer sources it is useful to configure the
   ;; :preview-key on a per-command basis using the `consult-customize' macro.
-  (consult-customize
-   consult-theme
-   :preview-key '(:debounce 0.2 any)
-   consult-ripgrep consult-git-grep consult-grep
-   consult-bookmark consult-recent-file
-   consult--source-recent-file consult--source-project-recent-file consult--source-bookmark
-   :preview-key (kbd "M-."))
+  ;; (consult-customize
+  ;;  consult-theme
+  ;;  :preview-key '(:debounce 0.2 any)
+  ;;  consult-ripgrep consult-git-grep consult-grep
+  ;;  consult-bookmark consult-recent-file
+  ;;  consult--source-recent-file consult--source-project-recent-file consult--source-bookmark
+  ;;  :preview-key (kbd "M-."))
 
-  ;; Optionally configure the narrowing key.
-  ;; Both < and C-+ work reasonably well.
-  (setq consult-narrow-key "<") ;; (kbd "C-+")
+  ;; ;; Optionally configure the narrowing key.
+  ;; ;; Both < and C-+ work reasonably well.
+  ;; (setq consult-narrow-key "<")
+  ;; (kbd "C-+")
 
   (setq consult-project-root-function
         (lambda ()
@@ -930,6 +948,7 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 ;; ----------------------------------------------------------------------
 
 (use-package helpful
+  ;; FIXME; these bindings do not work
   :bind  (("C-S-h c" . helpful-command)
           ("C-S-h v" . helpful-variable)
           ("C-S-h f" . helpful-function)
@@ -1034,6 +1053,8 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 ;; ----------------------------------------------------------------------
 ;; magit
 ;; ----------------------------------------------------------------------
+
+;; (setq auth-sources '("~/.authinfo"))
 
 (use-package magit
   :bind (("C-S-v s" . magit-status)
@@ -1621,6 +1642,12 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 
 ;;     (setq mu4e-headers-fields
 ;;           `((:date .  25)
+;;     (when (fboundp 'imagemagick-register-types)
+;;       (imagemagick-register-types))
+
+;;     (setq mu4e-headers-fields
+;;           `((:date .  25)
+;;             (:flags .  6)
 ;;             (:flags .  6)
 ;;             (:from-or-to . 22)
 ;;             (:subject . 35)
@@ -1642,6 +1669,7 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 ;; ----------------------------------------------------------------------
 
 (use-package multiple-cursors
+  ;; FIXME: captured by the window manager
   :bind (("s-c e" . mc/edit-lines)
          ("s-c a" . mc/mark-all-like-this)
          ("s-c n" . mc/mark-next-like-this)
@@ -1807,8 +1835,9 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
 (use-package windmove
   :bind (("C-S-l" . 'windmove-right)
          ("C-S-k" . 'windmove-up)
-         ("C-S-j" . 'windmove-down)
-         ("C-S-h" . 'windmove-left))
+         ;;         ("C-S-j" . 'windmove-down)
+         ;;         ("C-S-h" . 'windmove-left)
+         )
   :config
   (windmove-default-keybindings))
 
@@ -1826,12 +1855,12 @@ NEW-SESSION specifies whether to create a new xwidget-webkit session."
          ("M-S-h" . 'buf-move-left)
          ("M-S-l" . 'buf-move-right)))
 
-;; undo a change to a window configuration
 (use-package winner
   :bind (("C-S-w u" . winner-undo)
          ("C-S-w r" . winner-redo))
   :init
   (winner-mode 1))
+;; undo a change to a window configuration
 
 ;; ----------------------------------------------------------------------
 ;; snippets
