@@ -27,7 +27,8 @@
   ;; (set-face-attribute 'hl-paren-face nil :background "gray92")
   (global-highlight-parentheses-mode)
   ;;make paren highlight update after stuff like paredit changes
-  (add-to-list 'after-change-functions '(lambda (&rest x) (hl-paren-highlight))))
+  ;; (add-to-list 'after-change-functions '(lambda (&rest x) (hl-paren-highlight)))
+  )
 
 
 (use-package aggressive-indent
@@ -40,7 +41,7 @@
          (emacs-lisp-mode . lispy-mode)
          (ielm-mode . lispy-mode))
   :config
-  (setq lispy-close-quotes-at-end-p t)
+  ; (setq lispy-close-quotes-at-end-p t)
   (add-hook 'lispy-mode-hook #'turn-off-smartparens-mode)
 
   ;; (when (modulep! :lang emacs-lisp)

@@ -12,9 +12,8 @@
 
 (use-package eshell
   :commands (eshell)
-  :general
-  (my-leader-key
-    "as" 'eshell)
+  :bind
+  (("s-a s" . eshell))
   :init
   (add-hook 'eshell-mode-hook
             (lambda ()
@@ -36,10 +35,26 @@
 (use-package vterm
   ;; prevent hl-line in vterm
   :commands (vterm)
-  :general
-  (my-leader-key
-    "av" 'vterm)
+  :bind
+  (("s-a v" . vterm))
   :hook (vterm-mode . (lambda () (setq-local global-hl-line-mode nil))))
 
+
+
+(use-package eat
+  :commands (eat)
+  :bind
+  (("s-a t" . eat))
+  :config
+  (add-hook 'eshell-load-hook #'eat-eshell-mode)
+  (add-hook 'eat--semi-char-mode
+            (lambda ()
+              (make-local-variable 'scroll-margin)
+              (setq scroll-margin 0)))
+  ;; (add-hook 'eshell-load-hook #'eat-eshell-visual-command-mode)
+  )
+
+
 (provide 'init-shell-term)
+
 ;;; init-shell-term.el ends here

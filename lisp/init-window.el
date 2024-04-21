@@ -1,4 +1,4 @@
-;;; .emacs  --- user-init-file   -*- lexical-binding: t -*-
+;;; init-window.el  --- User-init-file   -*- lexical-binding: t -*-
 
 ;;; Commentary:
 
@@ -19,41 +19,47 @@
 (use-package ace-window)
 
 (use-package windmove
-  :general
-  (my-leader-key
-    "wl" 'evil-window-right
-    "wh" 'evil-window-left
-    "wj" 'evil-window-down
-    "wk" 'evil-window-up)
+  :bind
+  (("s-w l" . windmove-right)
+   ("s-w j" . windmove-left)
+   ("s-w k" . windmove-down)
+   ("s-w i" . windmove-up))
   :config
   (windmove-default-keybindings))
 
 (use-package winner
-  :general
-  (my-leader-key
-    "wu" 'winner-undo
-    "wU" 'winner-redo)
+  :bind
+  (("s-w u" . winner-undo)
+   ("s-w U" . winner-redo))
   :config
   (winner-mode 1))
 
 (use-package window
   :ensure nil
-  :general
-  (my-leader-key
-    "wr" 'split-window-right
-    "wb" 'split-window-below
-    "w=" 'balance-windows
-    "wd" 'delete-window
-    "wo" 'other-window
-    "wz" 'delete-other-windows
-    "w+" 'wnlarge-window
-    "w." 'enlarge-window-horizontally
-    "w," 'shrink-window-horizontally))
+  :bind
+  (("s-w r" . split-window-right)
+   ("s-w b" . split-window-below)
+   ("s-w =" . balance-windows)
+   ("s-w d" . delete-window)
+   ("s-w o" . other-window)
+   ("s-w z" . delete-other-windows)
+   ("s-w +" . enlarge-window)
+   ("s-w ." . enlarge-window-horizontally)
+   ("s-w ," . shrink-window-horizontally)))
 
 (use-package ace-window
-  :general
-  (my-leader-key
-    "wa" 'ace-window))
+  :bind
+  (("s-w a" . ace-window)))
+
+(use-package selected-window-accent-mode
+  :config
+  (selected-window-accent-mode 1)
+  :custom
+  (selected-window-accent-fringe-thickness 10)
+  ;; (selected-window-accent-custom-color nil)
+  (selected-window-accent-mode-style 'subtle))
+
+
 
 (provide 'init-window)
 ;;; init-window.el ends here

@@ -7,12 +7,13 @@
 ;;; Package system
 
 (use-package vertico
-  :bind (:map vertico-map
-              ("<tab>" . vertico-insert)
-              ("<escape>" . minibuffer-keyboard-quit)
-              ;; cycle through candidate groups
-              ("C-M-n" . vertico-next-group)
-              ("C-M-p" . vertico-previous-group))
+  :bind
+  (:map vertico-map
+        ("<tab>" . vertico-insert)
+        ("<escape>" . minibuffer-keyboard-quit)
+        ;; cycle through candidate groups
+        ("C-M-n" . vertico-next-group)
+        ("C-M-p" . vertico-previous-group))
   :init
   (vertico-mode)
   ;; Show more candidates
@@ -59,12 +60,14 @@
   ;; (add-hook 'marginalia-mode-hook #'all-the-icons-completion-marginalia-setup)
   )
 
+(use-package nerd-icons-completion
+  :after marginalia
+  :config
+  (nerd-icons-completion-mode)
+  (add-hook 'marginalia-mode-hook #'nerd-icons-completion-marginalia-setup))
+
 
 (use-package consult
-  :bind
-  (([remap switch-to-buffer] . consult-buffer)
-   ([remap bookmark-jump] . consult-bookmark)
-   ([remap isearch-abort] . isearch-cancel))
   ;; Enable automatic preview at point in the *Completions* buffer. This is
   ;; relevant when you use the default completion UI. You may want to also
   ;; enable `consult-preview-at-point-mode` in Embark Collect buffers.
@@ -87,57 +90,59 @@
   ;; Use Consult to select xref locations with preview
   (setq xref-show-xrefs-function #'consult-xref
         xref-show-definitions-function #'consult-xref)
-  (my-leader-key
-    "bb" 'consult-buffer
-    "bo" 'consult-buffer-other-window
+  :bind
+  (([remap switch-to-buffer] . consult-buffer)
+   ([remap bookmark-jump] . consult-bookmark)
+   ([remap isearch-abort] . isearch-cancel)
+   ("s-b b" . consult-buffer)
+   ("s-b o" . consult-buffer-other-window)
+   ("s-f F" . consult-find)
+   ("s-s G" . consult-git-grep)
+   ("s-s h" . consult-isearch-history)
+   ("s-m b" . consult-bookmark)
+   ("s-b F" . consult-buffer-other-frame)
+   ("s-f r" . consult-recent-file)
+   ("s-d c" . consult-dir)
+   ("s-e k" . consult-compile-error)
+   ("s-e f" . consult-flymake)
+   ("s-s s-g" . consult-goto-line)
+   ("s-s i" . consult-imenu)
+   ("s-s I" . consult-imenu-multi)
+   ("s-s l" . consult-line)
+   ("M-l" . consult-line)
+   ("s-s ." . isearch-forward-symbol-at-point)
+   ("s-s o" . isearch-occur)
+   ("s-s g" . consult-ripgrep)
+   ("s-g s-o" . consult-outline)
+   ("s-s L" . consult-line-multi)
+   ("s-s m" . consult-mark)
+   ("s-s k" . consult-global-mark)
+   )
 
-    "fF" 'consult-find
-    ;;        ("M-S-s F" . consult-locate)
-    ;;        ("M-S-s g" . consult-grep)
-    "sG" 'consult-git-grep
-    ;;        ("M-S-s L" . consult-line-multi)
-    ;; ("s-s o" . consult-multi-occur)
-    ;;        ("M-S-s k" . consult-keep-lines)
-    ;;        ("M-S-s u" . consult-focus-lines)
-    "sh" 'consult-isearch-history
 
+  ;;        ("M-S-s F" . consult-locate)
+  ;;        ("M-S-s g" . consult-grep)
+  ;; ("s-s o" . consult-multi-occur)
+  ;;        ("M-S-s k" . consult-keep-lines)
+  ;;        ("M-S-s u" . consult-focus-lines)
+  ;; ("s-b h" . consult-history)
+  ;;        ;; ("C-c m" . consult-mode-command)
+  ;;        ;; ("C-c k" . consult-kmacro)
+  ;;        ;; ("C-x M-:" . consult-complex-command)
+  ;;        ;; ("M-#" . consult-register-load)
+  ;;        ;; ("M-'" . consult-register-store)
+  ;;        ;; ("C-M-#" . consult-regi)
+  ;;        ;; ("M-y" . consult-yank-pop)
+  ;;        ("<help> a" . consult-apropos)
+  ;;        :map isearch-mode-map
+  ;; ("C-e" . consult-isearch-history)
 
-    ;; ("s-b h" . consult-history)
-    ;;        ;; ("C-c m" . consult-mode-command)
-    "mb" 'consult-bookmark
-    ;;        ;; ("C-c k" . consult-kmacro)
-    ;;        ;; ("C-x M-:" . consult-complex-command)
-    "bF" 'consult-buffer-other-frame
-    ;;        ;; ("M-#" . consult-register-load)
-    ;;        ;; ("M-'" . consult-register-store)
-    ;;        ;; ("C-M-#" . consult-regi)
-    ;;        ;; ("M-y" . consult-yank-pop)
-    ;;        ("<help> a" . consult-apropos)
-
-    "fr" 'consult-recent-file
-    "ek" 'consult-compile-error
-    "ef" 'consult-flymake
-    "sg" 'consult-goto-line
-    ;; ("s-g o" . consult-outline)
-    ;; ("s-g m" . consult-mark)
-    ;; ("s-g k" . consult-global-mark)
-    "si" 'consult-imenu
-    "sI" 'consult-imenu-multi
-
-    ;;        :map isearch-mode-map
-    ;; ("C-e" . consult-isearch-history)
-    "sl" 'consult-line
-    "s." 'isearch-forward-symbol-at-point
-    "so" 'isearch-occur
-    ;; FIXME: no such pogram as 'rg'
-    "sg" 'consult-ripgrep
-    "sL" 'consult-line-multi)
   :config
   ;; Optionally configure preview. The default value
   ;; is 'any, such that any key triggers the preview.
   ;; (setq consult-preview-key 'any)
-  ;; (Setq consult-preview-key (kbd "M-."))
-  ;; (s etq consult-preview-key (list (kbd "<S-down>") (kbd "<S-up>")))
+  ;; (setq consult-preview-key (kbd "M-."))
+  ;; (setq consult-preview-key (list (kbd "<S-down>") (kbd "<S-up>")))
   ;; For some commands and buffer sources it is useful to configure the
   ;; :preview-key on a per-command basis using the `consult-customize' macro.
   ;; (consult-customize
@@ -159,9 +164,18 @@
             (car (project-roots project))))))
 
 (use-package consult-dir
-  :bind (:map minibuffer-local-filename-completion-map
-              ("M-." . consult-dir)
-              ("M-j" . consult-dir-jump-file)))
+  :bind
+  (:map minibuffer-local-filename-completion-map
+        ("M-." . consult-dir)
+        ("M-j" . consult-dir-jump-file)))
+
+;; (use-package consult-imenu
+;;   :defer t
+;;   :config
+;;   (setf
+;;    (alist-get
+;;     ?k (plist-get (alist-get 'emacs-lisp-mode consult-imenu-config) :types))
+;;    '("Keymaps" font-lock-variable-name-face)))
 
 (provide 'init-vertico-consult)
 ;;; init-vertico-consult.el ends here

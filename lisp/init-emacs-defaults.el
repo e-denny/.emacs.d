@@ -103,7 +103,7 @@
   ;;       (append (list '(internal-border-width . 12))))
 
   ;; smooth scrolling
-  (setq scroll-margin 3
+  (setq scroll-margin 0
         scroll-conservatively 100
         scroll-preserve-screen-position t
         scroll-conservatively scroll-margin
@@ -129,12 +129,11 @@
   :hook ((prog-mode . flymake-mode)
          (before-save . whitespace-cleanup)
          (text-mode . turn-on-visual-line-mode))
-  :general
-  (my-leader-key
-    "SPC" 'execute-extended-command
-    "be" 'eval-buffer
-    "bd" 'kill-buffer)
-  :bind (("<copy>" .  kill-ring-save)
+  :bind (("s-x" . execute-extended-command)
+         ("s-u" . undo)
+         ("s-b e" . eval-buffer)
+         ("s-b d" . delete-buffer)
+         ("<copy>" .  kill-ring-save)
          ("<paste>" . yank)
          ("<cut>" . kill-region)))
 
@@ -207,26 +206,22 @@
 
 (use-package imenu
   :ensure nil
-  :config
-  (my-leader-key
-    "ji" 'imenu))
+  :bind ("s-j i" . imenu))
 
 ;; ----------------------------------------------------------------------
 ;; bookmark
 ;; ----------------------------------------------------------------------
 
 (use-package bookmark
-  :config
-  (my-leader-key
-    "mm" 'consult-bookmark
-    "ms" 'bookmark-set
-    "ml" 'bookmark-bmenu-list
-    "md" 'bookmark-delete))
+  :bind (("s-m m" . consult-bookmark)
+         ("s-m s" . bookmark-set)
+         ("s-m l" . bookmark-bmenu-list)
+         ("s-m d" . bookmark-delete)))
 
-(my-leader-key
-  "cmf" 'mark-defun
-  "cms" 'mark-sexp)
-
+(use-package emacs
+  :ensure nil
+  :bind (("s-m f" . mark-defun)
+         ("s-m s" . mark-sexp)))
 
 (provide 'init-emacs-defaults)
 ;;; init-emacs-defaults.el ends here

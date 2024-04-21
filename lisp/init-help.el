@@ -18,16 +18,13 @@
 ;; ----------------------------------------------------------------------
 
 (use-package helpful
-  ;; FIXME; these bindings do not work
-  :general
-  (my-leader-key
-    "hc" 'helpful-command
-    "hv" 'helpful-variable
-    "hf" 'helpful-function
-    "hk" 'helpful-key
-    "hh" 'helpful-at-point)
   :bind
-  (([remap describe-symbol] . helpful-symbol)
+  (("s-h c" . helpful-command)
+   ("s-h v" . helpful-variable)
+   ("s-h f" . helpful-function)
+   ("s-h k" . helpful-key)
+   ("s-h ." . helpful-at-point)
+   ([remap describe-symbol] . helpful-symbol)
    ([remap describe-variable] . helpful-variable)
    ([remap describe-command] . helpful-command)
    ([remap describe-key] . helpful-key)

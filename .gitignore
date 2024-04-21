@@ -22,3 +22,6 @@
 /url/
 /straight/build/eldoc/
 /eln-cache/
+/elisp-objects/
+/projects
+/tree-sitter/

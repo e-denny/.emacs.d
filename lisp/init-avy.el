@@ -11,11 +11,10 @@
 ;; ----------------------------------------------------------------------
 
 (use-package avy
-  :init
-  (my-leader-key
-    "jj" 'avy-goto-char-timer
-    "jl" 'avy-goto-line
-    "jc" 'avy-goto-char-2)
+  :bind
+  (("s-j j" . avy-goto-char-timer)
+   ("s-j l" . avy-goto-line)
+   ("s-j c" . avy-goto-char-2))
   :config
   (setq avy-background t))
 

@@ -14,12 +14,13 @@
   :bind (:map corfu-map
               ("<escape>" . corfu-quit)
               ("<return>" . corfu-insert)
-              ("M-l" . corfu-show-location))
+              ("M-l" . corfu-show-location)
+              ("M-d" . corfu-show-documentation))
   :custom
   (tab-always-indent 'complete)
   (completion-cycle-threshold nil)
   (corfu-cycle t)
-  (corfu-auto nil)
+  (corfu-auto t)
   (corfu-auto-prefix 2)
   (corfu-count 14)
   (corfu--goto)
@@ -36,15 +37,14 @@
   :init
   (global-corfu-mode))
 
-(use-package kind-icon
+(use-package nerd-icons-corfu
   :after corfu
-  :custom
-  (kind-icon-use-icons t)
-  (kind-icon-default-face 'corfu-default)
-  (kind-icon-blend-background nil)
-  (kind-icon-blend-frac 0.08)
   :config
-  (add-to-list 'corfu-margin-formatters #'kind-icon-margin-formatter))
+  (setq nerd-icons-corfu-mapping
+        '((array :style "cod" :icon "symbol_array" :face font-lock-type-face)
+          (boolean :style "cod" :icon "symbol_boolean" :face font-lock-builtin-face)
+          (t :style "cod" :icon "code" :face font-lock-warning-face)))
+  (add-to-list 'corfu-margin-formatters #'nerd-icons-corfu-formatter))
 
 ;; (use-package corfu-doc
 ;;   :load-path "lisp/corfu-doc"
@@ -63,20 +63,18 @@
 
 
 (use-package dabbrev
-  :general
-  (my-leader-key
-    "nc" 'dabbrev-completion
-    "ne" 'dabbrev-expand))
+  :bind
+  (("s-n c" . dabbrev-completion)
+   ("s-n e" . dabbrev-expand)))
 
 
 (use-package cape
-  :general
-  (my-leader-key
-    "np" 'completion-at-point
-    "nd" 'cape-dabbrev
-    "nf" 'cape-file
-    "ns" 'cape-symbol
-    "ns" 'cape-ispell)
+  :bind
+  (("s-n p" . completion-at-point)
+   ("s-n d" . cape-dabbrev)
+   ("s-n f" . cape-file)
+   ("s-n s" . cape-symbol)
+   ("s-n i" . cape-ispell))
   :config
   (add-to-list 'completion-at-point-functions #'cape-file)
   (add-to-list 'completion-at-point-functions #'cape-dabbrev)
@@ -91,10 +89,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package hippie-exp
-  :general
-  ;; FIXME: this is only for normal mode
-  (my-leader-key
-    "nh" 'hippie-expand)
+  :bind (("s-n h" . hippie-expand))
   :config
   (setq hippie-expand-try-functions-list '(try-expand-dabbrev
                                            try-expand-dabbrev-all-buffers

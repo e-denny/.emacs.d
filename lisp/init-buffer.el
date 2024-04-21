@@ -12,24 +12,29 @@
 
 ;; move a buffer to another window in a specified direction
 (use-package buffer-move
-  :config
-  (my-leader-key
-    "bk" 'buf-move-up
-    "bj" 'buf-move-down
-    "bh" 'buf-move-left
-    "bl" 'buf-move-right))
+  :bind
+  (("s-b I" . buf-move-up)
+   ("s-b K" . buf-move-down)
+   ("s-b J" . buf-move-left)
+   ("s-b L" . buf-move-right)))
 
 (use-package ibuffer
+  :bind
+  (("s-b i" . ibuffer))
   :config
-  (my-leader-key
-    "bi" 'ibuffer)
   (setq-default ibuffer-show-empty-filter-groups nil))
 
+(use-package nerd-icons-ibuffer
+  :config
+  (setq nerd-icons-ibuffer-icon t)
+  (setq nerd-icons-ibuffer-color-icon t)
+  (setq nerd-icons-ibuffer-icon-size 1.0)
+  (setq nerd-icons-ibuffer-human-readable-size t)
+  :hook (ibuffer-mode . nerd-icons-ibuffer-mode))
 
 (use-package ibuffer-sidebar
-  :init
-  (my-leader-key
-    "bs" 'ibuffer-sidebar-toggle-sidebar))
+  :bind
+  (("s-b s" . ibuffer-sidebar-toggle-sidebar)))
 
 (use-package uniquify
   :ensure nil
@@ -47,11 +52,10 @@
 
 (use-package files
   :ensure nil
-  :config
-  (my-leader-key
-    "fs" 'save-buffer
-    "ff" 'find-file
-    "fw" 'write-file))
+  :bind
+  (("s-f s" . save-buffer)
+   ("s-f f" . find-file)
+   ("s-f w" . write-file)))
 
 (provide 'init-buffer)
 ;;; init-buffer.el ends here

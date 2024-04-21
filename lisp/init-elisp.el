@@ -105,45 +105,36 @@ Functions are differentiated into special forms, built-in functions and
 (use-package elisp-slime-nav
   :diminish
   ;; FIXME: this does not work
-  :general
-  (my-leader-key
-    "cev" 'elisp-slime-nav-describe-elisp-thing-at-point)
+  :bind (("s-c e v" . elisp-slime-nav-describe-elisp-thing-at-point))
   :hook ((emacs-lisp-mode ielm-mode lisp-interaction-mode) . elisp-slime-nav-mode))
 
 (use-package macrostep
-  :general
-  (my-leader-key
-    "ce" '(:ignore t :which-key "emacs")
-    "cee" 'macrostep-expand
-    "cen" 'macrostep-next-macro
-    "cep" 'macrostep-prev-macro
-    "cec" 'macrostep-collapse
-    "ceq" 'macrostep-collapse-all))
+  :bind
+  (("s-c e e" . macrostep-expand)
+   ("s-c e n" . macrostep-next-macro)
+   ("s-c e p" . macrostep-prev-macro)
+   ("s-c e c" . macrostep-collapse)
+   ("s-c e q" . macrostep-collapse-all)))
 
 (use-package eros
   :init (eros-mode t))
 
 (use-package ielm
-  :init
-  (my-leader-key
-    "ci" 'ielm))
+  :bind
+  (("s-c i" . ielm)))
 
 (use-package elisp-mode
   :ensure nil
-  :init
-  (my-local-leader-key
-    :keymaps 'emacs-lisp-mode-map
-    "ces" 'eval-last-sexp
-    "cr" 'eval-region
-    "cb" 'eval-buffer
-    "cd" 'eval-defun))
+  :bind
+  (:map emacs-lisp-mode-map
+        ("s-c e s" . eval-last-sexp)
+        ("s-c r" . eval-region)
+        ("s-c b" . eval-buffer)
+        ("s-c d" . eval-defun)))
 
 (use-package edebug
-  :general
-  (my-leader-key
-    "cef")
-  :bind (:map emacs-lisp-mode-map
-              ("s-e b" . edebug-defun)))
+  :bind
+  (("s-c e f" . edebug-defun)))
 
 ;; ----------------------------------------------------------------------
 ;; esup
@@ -151,28 +142,15 @@ Functions are differentiated into special forms, built-in functions and
 
 (use-package esup
   :commands esup
-  :init
-  (progn
-    (my-leader-key
-      "aes" 'esup))
-  :config
-  (my-motion-keys
-    :keymaps 'esup-mode-map
-    "n" 'esup-next-result
-    "p" 'esup-previous-result))
+  :bind ("s-a e s" . esup))
 
 
 (use-package benchmark-init
-  :commands (benchmark-init/show-durations-tree
-             benchmark-init/durations-tree)
-  :init
-  (progn
-    (my-leader-key
-      "ab" '(:ignore t :which-key "benchmark")
-      "abt" 'benchmark-init/show-durations-tabulated
-      "abr" 'benchmark-init/show-durations-tree))
+  :bind
+  (("s-a b t" . benchmark-init/show-durations-tabulated)
+   ("s-a b r" . benchmark-init/show-durations-tree))
   :config
-  ;; To disable collection of benchmark data after init is done.
+  ;; To disable collection of benchmarks data after init is done.
   (add-hook 'after-init-hook 'benchmark-init/deactivate))
 
 (provide 'init-elisp)

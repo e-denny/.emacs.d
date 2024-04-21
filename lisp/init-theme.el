@@ -22,9 +22,9 @@
 ;; ----------------------------------------------------------------------
 
 (use-package rainbow-mode
+  :bind
+  (("C-M-s-t r" . rainbow-mode))
   :config
-  (my-leader-key
-    "tr" 'rainbow-mode)
   (rainbow-mode 1))
 
 ;; (use-package modus-themes
@@ -49,13 +49,11 @@
 ;;   (modus-themes-load-vivendi))
 
 (use-package ef-themes
-  :config (load-theme 'ef-autumn :no-confirm))
+  :config (load-theme 'ef-elea-dark :no-confirm))
 
-;; (use-package doom-themes
-;;   :config
-;;   (setq doom-themes-enable-bold t
-;;         doom-themes-enable-italic t)
-;;   (load-theme 'doom-tokyo-night t))
+(use-package doom-modeline
+  :hook
+  (after-init . doom-modeline-mode))
 
 (provide 'init-theme)
 ;;; init-theme.el ends here

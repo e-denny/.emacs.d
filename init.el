@@ -8,9 +8,9 @@
 
 (require 'package)
 (require 'cl-lib)
-
 (setq package-archives
       '(("melpa" . "https://melpa.org/packages/")
+        ("nongnu" . "https://elpa.nongnu.org/nongnu/")
         ("gnu"   . "https://elpa.gnu.org/packages/")))
 
 ;; make sure packages are in the load path
@@ -25,6 +25,7 @@
 
 (require 'use-package-ensure)
 (setq use-package-always-ensure t)
+(setq use-package-enable-imenu-support t)
 
 (use-package git)
 (setq use-package-verbose t)
@@ -70,7 +71,8 @@
 
 ;; ----------------------------------------------------------------------
 
-(use-package diminish)
+(use-package diminish
+  :after use-package)
 
 (diminish 'visual-line-mode "")
 (diminish 'undo-tree-mode "")
@@ -78,7 +80,7 @@
 (diminish 'isearch-mode "?")
 (diminish 'abbrev-mode "")
 
-(require 'init-evil)
+(require 'init-which-key)
 (require 'init-emacs-defaults)
 (require 'init-corfu)
 (require 'init-avy)
@@ -91,13 +93,13 @@
 (require 'init-embark)
 (require 'init-hydra)
 (require 'init-theme)
-(require 'init-treemacs)
 (require 'init-window)
 (require 'init-buffer)
 (require 'init-yasnippet)
 (require 'init-funcs)
 (require 'init-magit)
 (require 'init-project)
+(require 'init-denote)
 (require 'init-org)
 (require 'init-help)
 (require 'init-web)
@@ -105,6 +107,7 @@
 (require 'init-mc-iedit)
 (require 'init-eglot)
 (require 'init-psession)
+(require 'init-tabs)
 (require 'init-restart-emacs)
 
 (provide 'init)
