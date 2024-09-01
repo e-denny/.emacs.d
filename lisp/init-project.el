@@ -11,6 +11,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package project
+  :ensure nil
   :bind
   (("s-p p" . project-find-file))
   )

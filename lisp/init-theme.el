@@ -49,7 +49,9 @@
 ;;   (modus-themes-load-vivendi))
 
 (use-package ef-themes
-  :config (load-theme 'ef-elea-dark :no-confirm))
+  :config
+  (setf ef-themes-mixed-fomts nil)
+  (load-theme 'ef-elea-dark :no-confirm))
 
 (use-package doom-modeline
   :hook

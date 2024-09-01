@@ -10,10 +10,6 @@
 ;; denote
 ;; ----------------------------------------------------------------------
 
-(use-package mixed-pitch
-  :hook
-  (text-mode . mixed-pitch-mode))
-
 
 (use-package denote
   :init
@@ -50,9 +46,9 @@
 
 
 ;; Read ePub files
-(use-package nov
-  :init
-  (add-to-list 'auto-mode-alist '("\\.epub\\'" . nov-mode)))
+;; (use-package nov
+;;   :init
+;;   (add-to-list 'auto-mode-alist '("\\.epub\\'" . nov-mode)))
 
 
 (use-package denote-explore
@@ -81,41 +77,6 @@
    ("C-c w e n" . denote-explore-network)
    ("C-c w e v" . denote-explore-network-regenerate)
    ("C-c w e D" . denote-explore-degree-barchart)))
-
-
-;; Managing Bibliographies
-(use-package bibtex
-  :custom
-  (bibtex-dialect 'BibTeX)
-  (bibtex-set-dialect 'biblatex)
-  (bibtex-user-optional-fields
-   '(("keywords" "Keywords to describe the entry" "")
-     ("file" "Link to a document file." "" )))
-  (bibtex-align-at-equal-sign t))
-
-
-;; Biblio package for adding BibTeX records and download publications
-(use-package biblio)
-
-
-(use-package citar
-  ;;  :after org-cite
-  :bind (:map org-mode-map
-              ("s-o C i" . org-cite-insert)
-              ("s-o C r" . citar-insert-reference)
-              ("s-o C n" . citar-open-notes))
-  :custom
-  (org-cite-global-bibliography '("/home/edgar/org/marxism/biblio/library/library.bib"))
-  (org-cite-insert-pirocessor 'citar)
-  (org-cite-follow-processor 'citar)
-  (org-cite-activate-processor 'citar)
-  (citar-bibliography org-cite-global-bibliography))
-
-(use-package citar-embark
-  :after citar embark
-  :no-require
-  :config
-  (citar-embark-mode))
 
 (provide 'init-denote)
 ;;; init-denote.el ends here

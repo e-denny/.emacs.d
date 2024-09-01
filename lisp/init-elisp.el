@@ -91,6 +91,7 @@ Functions are differentiated into special forms, built-in functions and
          (emacs-lisp-mode . my-enhanced-elisp-fontification)))
 
 (use-package eldoc
+  :ensure nil
   :diminish eldoc-mode
   :commands turn-on-eldoc-mode
   :init
@@ -120,6 +121,7 @@ Functions are differentiated into special forms, built-in functions and
   :init (eros-mode t))
 
 (use-package ielm
+  :ensure nil
   :bind
   (("s-c i" . ielm)))
 
@@ -133,6 +135,7 @@ Functions are differentiated into special forms, built-in functions and
         ("s-c d" . eval-defun)))
 
 (use-package edebug
+  :ensure nil
   :bind
   (("s-c e f" . edebug-defun)))
 

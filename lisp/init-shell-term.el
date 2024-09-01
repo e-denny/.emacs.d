@@ -11,6 +11,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package eshell
+  :ensure nil
   :commands (eshell)
   :bind
   (("s-a s" . eshell))

@@ -16,9 +16,8 @@
   :config
   (winum-mode))
 
-(use-package ace-window)
-
 (use-package windmove
+  :ensure nil
   :bind
   (("s-w l" . windmove-right)
    ("s-w j" . windmove-left)
@@ -28,6 +27,7 @@
   (windmove-default-keybindings))
 
 (use-package winner
+  :ensure nil
   :bind
   (("s-w u" . winner-undo)
    ("s-w U" . winner-redo))
@@ -51,15 +51,13 @@
   :bind
   (("s-w a" . ace-window)))
 
-(use-package selected-window-accent-mode
-  :config
-  (selected-window-accent-mode 1)
-  :custom
-  (selected-window-accent-fringe-thickness 10)
-  ;; (selected-window-accent-custom-color nil)
-  (selected-window-accent-mode-style 'subtle))
-
-
+;; (use-package selected-window-accent-mode
+;;   :config
+;;   (selected-window-accent-mode 1)
+;;   :custom
+;;   (selected-window-accent-fringe-thickness 10)
+;;   ;; (selected-window-accent-custom-color nil)
+;;   (selected-window-accent-mode-style 'subtle))
 
 (provide 'init-window)
 ;;; init-window.el ends here

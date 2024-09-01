@@ -19,6 +19,7 @@
    ("s-b L" . buf-move-right)))
 
 (use-package ibuffer
+  :ensure nil
   :bind
   (("s-b i" . ibuffer))
   :config

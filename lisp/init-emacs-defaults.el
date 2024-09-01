@@ -26,10 +26,12 @@
 (add-to-list 'initial-frame-alist '(fullscreen . fullheight))
 ;; (add-to-list 'default-frame-alist '(internal-border-width . 8))
 
-;; (set-face-attribute 'default nil
-;;                     :family "Source Code Pro" :height 110 :width 'expanded)
 (set-face-attribute 'default nil
-                    :family "Jetbrains Mono" :height 110 :weight 'medium)
+                    :family "Jetbrains Mono" :height 135 :width 'expanded)
+(set-face-attribute 'variable-pitch nil
+                    :family "Jetbrains Mono" :height 135 :width 'expanded)
+;; (set-face-attribute 'default nil
+;;                     :family "Jetbrains Mono" :height 135 :weight 'medium)
 ;; (set-face-attribute 'default nil
 ;;                     :family "Source Code Pro" :height 110 :weight 'medium)
 ;; (set-face-attribute 'variable-pitch nil
@@ -42,11 +44,14 @@
 (setq custom-safe-themes t)
 
 (use-package emacs
+  :ensure nil
   :config
   (blink-cursor-mode -1)
   (scroll-bar-mode -1)
   (tool-bar-mode -1)
-  (menu-bar-mode -1)
+  (setq use-dialog-box nil)
+  (setq use-file-dialog nil)
+  ;; (menu-bar-mode -1)
   (tooltip-mode -1)
   (setq initial-scratch-message "")
   (setq inhibit-startup-screen t)
@@ -153,6 +158,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package recentf
+  :ensure nil
   :custom
   (recentf-max-saved-items 50)
   (recentf-max-menu-items 50)
@@ -169,6 +175,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package savehist
+  :ensure nil
   :init
   (progn
     (setq savehist-file "~/.emacs.d/savehist")
@@ -193,6 +200,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package proced
+  :ensure nil
   :commands proced
   :config
   (setq proced-auto-update-interval 1)
@@ -213,6 +221,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package bookmark
+  :ensure nil
   :bind (("s-m m" . consult-bookmark)
          ("s-m s" . bookmark-set)
          ("s-m l" . bookmark-bmenu-list)

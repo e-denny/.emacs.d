@@ -11,6 +11,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package eww
+  :ensure nil
   :commands eww
   :init
   (add-hook 'eww-after-render-hook #'shrface-mode)

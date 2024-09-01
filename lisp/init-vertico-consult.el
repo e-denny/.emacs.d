@@ -35,6 +35,7 @@
 
 
 (use-package emacs
+  :ensure nil
   :init
   (defun crm-indicator (args)
     (cons (concat "[CRM] " (car args)) (cdr args)))
@@ -168,6 +169,9 @@
   (:map minibuffer-local-filename-completion-map
         ("M-." . consult-dir)
         ("M-j" . consult-dir-jump-file)))
+
+(use-package consult-flycheck
+  :bind ("M-g f" . consult-flycheck))
 
 ;; (use-package consult-imenu
 ;;   :defer t

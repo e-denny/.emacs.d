@@ -11,6 +11,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package emacs
+  :ensure nil
   :config
 
   (defun my/next-begin-sexp ()

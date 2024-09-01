@@ -11,6 +11,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package org
+  :ensure nil
   :mode ("\\.org\\'" . org-mode)
   :bind (:map org-mode-map
               ("s-o s" . org-store-link)
@@ -128,6 +129,7 @@
 
 ;; Modernise Org mode interface
 (use-package org-modern
+  :after org
   :hook
   (org-mode . global-org-modern-mode)
   :custom
@@ -178,14 +180,9 @@
 ;; pdf
 ;; ----------------------------------------------------------------------
 
-(setq TeX-view-program-selection '((output-pdf "PDF Tools"))
-      TeX-view-program-list '(("PDF Tools" TeX-pdf-tools-sync-view))
-      TeX-source-correlate-start-server t)
-
-(add-hook 'TeX-after-compilation-finished-functions
-          #'TeX-revert-document-buffer)
-
 (use-package pdf-tools
+  :ensure t
+  :mode ("\\.pdf$" . pdf-view-mode)
   :bind
   (:map pdf-view-mode-map
         ("d" . pdf-view-midnight-minor-mode)
@@ -195,13 +192,13 @@
         ("C-s" . isearch-forward))
   :config
   (pdf-tools-install-noverify)
+  (pdf-tools-install)
   (setq-default pdf-view-display-size 'fit-width)
   (setq pdf-view-use-scaling t
         pdf-view-use-imagemagick nil)
   :custom
   (pdf-view-midnight-colors '("white smoke" . "dark slate gray"))
   (pdf-annot-activate-created-annotations t "automatically annotate highlights"))
-
 
 (use-package org-pdftools
   :after org
@@ -235,7 +232,7 @@
   (org-mode . org-fragtog-mode)
   :custom
   (org-format-latex-options
-   (plist-put org-format-latex-options :scale 2)
+   (plist-put org-format-latex-options :scale 1.25)
    (plist-put org-format-latex-options :foreground 'auto)
    (plist-put org-format-latex-options :background 'auto)))
 

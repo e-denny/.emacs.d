@@ -16,6 +16,7 @@
               ("<return>" . corfu-insert)
               ("M-l" . corfu-show-location)
               ("M-d" . corfu-show-documentation))
+  :hook (tex-mode . corfu-mode)
   :custom
   (tab-always-indent 'complete)
   (completion-cycle-threshold nil)
@@ -63,6 +64,7 @@
 
 
 (use-package dabbrev
+  :ensure nil
   :bind
   (("s-n c" . dabbrev-completion)
    ("s-n e" . dabbrev-expand)))
@@ -89,6 +91,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package hippie-exp
+  :ensure nil
   :bind (("s-n h" . hippie-expand))
   :config
   (setq hippie-expand-try-functions-list '(try-expand-dabbrev

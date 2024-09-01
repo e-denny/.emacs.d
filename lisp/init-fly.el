@@ -11,6 +11,7 @@
 ;; ----------------------------------------------------------------------
 
 (use-package flyspell
+  :ensure nil
   :commands (flyspell-auto-correct-previous-word flyspell-correct-word-generic)
   :init
   (setq flyspell-use-meta-tab nil)
@@ -19,6 +20,8 @@
   (flyspell-use-global-abbrev-table-p t)
   (flyspell-issue-message-flag nil)
   (flyspell-issue-welcome-flag nil)
+  (ispell-program-name "aspell")
+  (aspell-program-name "/usr/bin/aspell")
   :hook
   (text-mode . flyspell-mode)
   :config
@@ -33,12 +36,12 @@
 ;; ----------------------------------------------------------------------
 
 (use-package flymake
+  :ensure nil
   :bind (("s-e c" . display-local-help)
-     ("s-e e" . flymake-show-buffer-diagnostics)
-     ("s-e m" . flymake-menu)
-     ("s-e n" . flymake-goto-next-error)
-     ("s-e p" . flymake-goto-previous-error)))
-
+         ("s-e e" . flymake-show-buffer-diagnostics)
+         ("s-e m" . flymake-menu)
+         ("s-e n" . flymake-goto-next-error)
+         ("s-e p" . flymake-goto-previous-error)))
 
 (provide 'init-fly)
 ;;; init-fly.el ends here
