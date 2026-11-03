@@ -733,6 +733,28 @@ Tabs outside a project (*scratch*, say) keep whatever group they had."
          ("C-c c" . org-capture)
          ("C-c l" . org-store-link)))
 
+;; Soft wrap at 100 columns.
+;;
+;; A fixed measure rather than the window width: `visual-fill-column-mode'
+;; sets the window margins from `fill-column', so a paragraph wraps at column
+;; 100 even in a full-frame window. Nothing in the file changes -- this is
+;; display only -- and in a window narrower than 100 columns the margins
+;; collapse to 0, so text still fills the frame. `visual-line-mode' is the
+;; companion it expects: it turns on `word-wrap', so the break falls between
+;; words rather than mid-word, and makes movement act on the lines shown
+;; instead of the long ones stored. `fill-column' is set buffer-locally to the
+;; same 100 so that `M-q' (`org-fill-paragraph') fills to the measure on
+;; screen.
+(defun my-org-soft-wrap-100 ()
+  "Wrap text in the current buffer at 100 columns."
+  (setq-local fill-column 100)
+  (visual-line-mode 1)
+  (visual-fill-column-mode 1))
+
+(use-package visual-fill-column
+  :ensure t
+  :hook (org-mode . my-org-soft-wrap-100))
+
 ;; org-modern -- headline stars, TODO boxes, tag boxes, table rules and source
 ;; frames drawn with text properties, plus headlines in the `variable-pitch'
 ;; face. The two hooks are the per-buffer setup its README gives; the agenda
