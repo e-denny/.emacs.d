@@ -61,10 +61,20 @@
 (add-hook 'minibuffer-exit-hook #'my-gc-restore)
 
 ;; ----------------------------------------------------------------------
+;; Emacs server + pi-subagents live views
+;;
+;; pi-subagents reaches this Emacs instance through emacsclient, so the
+;; server must be up. `pi-subagents-open-run' (the companion package for the
+;; pi extension) starts a subagent's live viewer in a term buffer and pops
+;; it up in a new window without stealing keyboard focus from pi.
 
-;; (load "server")
-;; (unless (server-running-p)
-;;   (server-start))
+(require 'server)
+(unless (server-running-p)
+  (server-start))
+
+(add-to-list 'load-path
+             (expand-file-name "~/.pi/agent/extensions/pi-subagents/emacs"))
+(require 'pi-subagents)
 
 ;; ----------------------------------------------------------------------
 
