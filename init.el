@@ -511,7 +511,61 @@ Tabs outside a project (*scratch*, say) keep whatever group they had."
 ;; 'ask, so a package upgrade asks before fetching a new one.
 (use-package ghostel
   :ensure t
-  :bind (("C-c g" . ghostel)))
+  :bind (("C-c g" . ghostel))
+  :init
+  ;; Never ask before killing a terminal -- neither on exit ("Ghostel
+  ;; buffers with running processes (...); exit anyway?") nor on `C-x k'
+  ;; with a command running in it.  Both prompts come from
+  ;; `ghostel--query-before-killing-p', which reads this variable.
+  (setq ghostel-query-before-killing nil))
+
+;; ghostel-restore -- terminals come back with the session, in the directory
+;; they were in, and a pi that was running in one is resumed with the same
+;; session file. It registers `ghostel-mode' as an EasySession managed major
+;; mode (see lisp/ghostel-restore.el for how the pi session is identified);
+;; `M-x ghostel-restore-describe' in a terminal shows what would come back.
+(use-package ghostel-restore
+  :ensure nil                          ; lives in ~/.emacs.d/lisp
+  ;; Loaded eagerly, not `:after (ghostel easysession)': EasySession looks
+  ;; the mode up in its restore handler, which runs on `emacs-startup-hook'.
+  ;; With `:after', the registration only appeared the first time a terminal
+  ;; was opened (ghostel loads on demand), i.e. after the restore, and the
+  ;; saved terminals were skipped in silence -- no error, no warning.
+  :demand t
+  :config (ghostel-restore-mode 1))
+
+;; ----------------------------------------------------------------------
+;; quitting: no questions
+;; ----------------------------------------------------------------------
+
+;; Emacs asks, once per process no one else has vouched for, "Active
+;; processes exist; kill them and exit anyway?" -- shell and eshell
+;; buffers, TRAMP connections, compilation runs.  Nothing here is worth a
+;; question: buffers are files on disk and the session (terminals, their
+;; directories and pi sessions, see `ghostel-restore') is written by
+;; `easysession--auto-save' while Emacs is still shutting down, so the
+;; next start puts it all back.  The terminal packages' own versions of
+;; this question are switched off where they are configured: ghostel with
+;; `ghostel-query-before-killing', pilish with
+;; `pilish-quit-without-confirmation'.
+;;
+;; Prompts about unsaved *files* are gone too, by saving instead of asking:
+;; `C-x C-c' runs `my-save-and-exit' below, which is
+;; `save-buffers-kill-emacs' with a non-nil ARG -- "silently save all
+;; file-visiting buffers without asking".  So the exit is: sessions
+;; written, files written, processes killed, nothing to answer.
+(setq confirm-kill-processes nil)
+
+(defun my-save-and-exit ()
+  "Save every modified file buffer without asking, then exit Emacs.
+Unlike plain `save-buffers-kill-emacs', nothing is asked: the ARG that
+makes `save-some-buffers' save all is what the prefix would have done.
+The session (`easysession--auto-save') and the pi/terminal state go first,
+on `kill-emacs-query-functions'."
+  (interactive)
+  (save-buffers-kill-emacs t))
+
+(global-set-key (kbd "C-x C-c") #'my-save-and-exit)
 
 ;; ----------------------------------------------------------------------
 ;; dired
@@ -796,10 +850,14 @@ Tabs outside a project (*scratch*, say) keep whatever group they had."
 ;; and markdown-table-wrap. The installed Emacs 31.1 `transient' already
 ;; satisfies pilish's >= 0.9 requirement, so no GNU ELPA `compat' upgrade is
 ;; needed. `defalias' gives the short `M-x pi' entry point, and the alias
-;; must come after the package is loaded, hence `:init'.
+;; must come after the package is loaded, hence `:init'.  The quit
+;; confirmation is off for the same reason ghostel's is (see "quitting"
+;; above): a live pi process is not worth an exit question.
 (use-package pilish
   :ensure t
-  :init (defalias 'pi 'pilish))
+  :init
+  (defalias 'pi 'pilish)
+  (setq pilish-quit-without-confirmation t))
 
 (use-package diminish
   :after use-package)
