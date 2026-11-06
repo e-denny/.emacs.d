@@ -91,6 +91,27 @@
   :init
   (vertico-mode 1))
 
+;; Posframe -- the child frames the two popups below are drawn in.  Nothing is
+;; tuned here: it is declared so that it stays installed on its own account.
+(use-package posframe
+  :ensure t)
+
+;; Vertico-posframe -- show the minibuffer, prompt and candidates together, in
+;; a child frame instead of in the echo area: the list rises from the bottom
+;; of the frame, centered, like a panel, and leaves the echo area free.
+;; `vertico-posframe-width' stays nil, so the frame fits its candidates above
+;; the package's floor of 62% of the frame width; the background, the text
+;; color and the border come from the `vertico-posframe' faces, which inherit
+;; the theme's `default'.  The package is not on MELPA, hence `:vc' (Emacs
+;; 30+; `elpa/' is ignored by git): on a machine that lacks it, use-package
+;; clones it into `package-user-dir' and byte-compiles it.
+(use-package vertico-posframe
+  :vc (:url "https://github.com/tumashu/vertico-posframe")
+  :after vertico
+  :config
+  (setq vertico-posframe-poshandler #'posframe-poshandler-frame-bottom-center)
+  (vertico-posframe-mode 1))
+
 ;; Marginalia -- annotations (docs, keybindings, file info) on candidates.
 (use-package marginalia
   :ensure t
@@ -231,7 +252,7 @@
          ("C-c s d" . easysession-delete)))
 
 ;; ----------------------------------------------------------------------
-;; which-key and project (both built in)
+;; which-key (with its posframe) and project (the latter built in)
 ;; ----------------------------------------------------------------------
 
 ;; which-key -- show the completions of a prefix key after a short delay.
@@ -240,10 +261,42 @@
   :ensure nil                          ; built in
   :init
   (which-key-mode 1)
-  (setq which-key-idle-delay 0.3
+  (setq ;; A full second, so that a two-key sequence typed at speed -- C-x C-f --
+        ;; is finished before the list would appear between its two halves.
+        ;; `which-key-idle-secondary-delay' is the shorter delay for the list
+        ;; reappearing after it has been shown once in the same sequence, and
+        ;; does not affect that first appearance.
+        which-key-idle-delay 1.0
         which-key-idle-secondary-delay 0.05
         which-key-add-column-padding 1
         which-key-show-early-on-C-h t))
+
+;; which-key-posframe -- draw that list in a child frame against the right
+;; edge of the frame instead of in the side window which-key uses by default.
+;; The poshandler is written here because posframe's own `frame-*' corner
+;; handlers return a marker position that only means anything to a
+;; refposhandler, which this package does not pass; they end up at the left.
+;; This one is measured from the frame's left edge, so the popup stays on the
+;; frame's right wherever the selected window happens to be -- which the
+;; window-relative handler it replaced could not promise.  Its top is the top
+;; of the frame, over the empty right end of the tab bar.  One column makes
+;; the list read downwards along that edge: `which-key--create-pages' lays the
+;; keys out vertically when `which-key-max-display-columns' is 1.
+(defun my-which-key-posframe-position (info)
+  "Put the which-key posframe at the top right corner of the frame.
+INFO is the plist `posframe-show' hands its poshandler; the x coordinate
+is the frame's width less the popup's own, both in pixels."
+  (cons (- (plist-get info :parent-frame-width)
+           (plist-get info :posframe-width))
+        0))
+
+(use-package which-key-posframe
+  :ensure t
+  :after which-key
+  :config
+  (setq which-key-posframe-poshandler #'my-which-key-posframe-position
+        which-key-max-display-columns 1)
+  (which-key-posframe-mode 1))
 
 ;; project -- per-project commands on the built-in `C-x p' prefix.
 (use-package project
