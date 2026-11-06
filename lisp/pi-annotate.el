@@ -17,18 +17,18 @@
 ;; frame:
 ;;
 ;;   * region in the reviewed file -> `C-c C c' records a comment, and the
-;;     cursor moves into the new box so the note can be typed at once;
+;;     cursor moves into the new note so it can be typed at once;
 ;;   * `C-c C d' marks the region for deletion (press it again on the same
 ;;     range to remove the mark);
-;;   * `C-c C j' jumps between a box and the text it belongs to, `C-c C k'
+;;   * `C-c C j' jumps between a note and the text it belongs to, `C-c C k'
 ;;     removes the annotation at the cursor;
 ;;   * `C-c C q' finishes the review, `C-c C x' aborts it.
 ;;
 ;; Commented spans get a yellow background in the reviewed file, deleted spans
-;; get strikethrough, and every annotation is drawn as a rounded box in the
-;; sidecar, aligned with the text it refers to.  The sidecar stays a plain
-;; Markdown/Org file on disk: the markers, borders and highlighting are
-;; overlays, not text.
+;; get strikethrough, and every annotation in the sidecar is set off by a drawn
+;; rule above and below it, aligned with the text it refers to.  The note
+;; itself is plain text, so the cursor in it behaves like any other cursor.
+;; The sidecar stays a plain Markdown/Org file on disk: the rules are text.
 ;;
 ;; On finish the sidecar is written and its path is reported back to pi through
 ;; the result file named by the extension, which then hands the annotations to
@@ -76,7 +76,7 @@
 (defcustom pi-annotate-scroll-sync t
   "Whether the reviewed file and the sidecar scroll together.
 The sidecar is laid out on the same line numbers as the reviewed file, so
-keeping the two window starts on the same line keeps every box beside the
+keeping the two window starts on the same line keeps every note beside the
 text it annotates."
   :type 'boolean
   :group 'pi-annotate)
@@ -86,10 +86,19 @@ text it annotates."
   :type 'boolean
   :group 'pi-annotate)
 
+(defcustom pi-annotate-redraw-idle 0.45
+  "How long typing must pause before the review is redrawn, in seconds.
+The redraw re-reads the sidecar, re-aligns the rules and writes the file, so
+it waits for the user to stop; anything shorter is spent while keys are still
+arriving."
+  :type 'number
+  :group 'pi-annotate)
+
 (defcustom pi-annotate-autoformat t
-  "Whether notes are wrapped to the box width as you type.
-Longer lines that arrive from elsewhere are re-wrapped when the review
-redraws; the wrapping is undone by setting this to nil."
+  "Whether notes are wrapped to the sidecar width.
+The wrapping happens on a redraw -- a moment after typing stops -- rather
+than on the keystroke that crosses the margin.  Set this to nil to leave
+notes exactly as typed."
   :type 'boolean
   :group 'pi-annotate)
 
@@ -105,8 +114,8 @@ review."
 ;;;; Faces
 ;;
 ;; The palette mirrors annotate.nvim: amber comment spans, struck-through grey
-;; deletions, and a blue/red/yellow box border that brightens for the
-;; annotation under the cursor.
+;; deletions, and blue/red/yellow rules that brighten for the annotation under
+;; the cursor.
 
 (defface pi-annotate-comment
   '((((background dark)) :background "#4c4400" :foreground "#ffe58a")
@@ -140,28 +149,28 @@ review."
   '((((background dark)) :foreground "#7aa2f7")
     (((background light)) :foreground "#1e66f5")
     (t :inherit default))
-  "Face for the box borders in the sidecar."
+  "Face for the rules in the sidecar."
   :group 'pi-annotate)
 
 (defface pi-annotate-box-comment
   '((((background dark)) :foreground "#7aa2f7" :weight bold)
     (((background light)) :foreground "#1e66f5" :weight bold)
     (t :inherit default))
-  "Face for the border of a comment box."
+  "Face for the rules around a comment."
   :group 'pi-annotate)
 
 (defface pi-annotate-box-delete
   '((((background dark)) :foreground "#f7768e" :weight bold)
     (((background light)) :foreground "#d20f39" :weight bold)
     (t :inherit default))
-  "Face for the border of a deletion box."
+  "Face for the rules around a deletion."
   :group 'pi-annotate)
 
 (defface pi-annotate-box-active
   '((((background dark)) :foreground "#ffd75f" :weight bold)
     (((background light)) :foreground "#b8860b" :weight bold)
     (t :inherit default))
-  "Face for the border of the box at the cursor."
+  "Face for the rules around the annotation at the cursor."
   :group 'pi-annotate)
 
 ;;;; Source formats
@@ -171,19 +180,29 @@ review."
 ;; accepts both styles whatever the file extension, so a sidecar written by an
 ;; earlier run is still picked up.
 
+(defconst pi-annotate--rule-char ?\u2500
+  "Character that draws the rule around a note.")
+
+(defconst pi-annotate--rule-suffix-regexp
+  (format "[ \t]*[%c-]*[ \t]*" pi-annotate--rule-char)
+  "Regexp matching the rule a marker line may carry after its text.")
+
 (defconst pi-annotate--marker-regexps
   (list
    (concat "^<!--[ \t]*annotate:#\\([0-9]+\\)[ \t]+"
            "\\([0-9]+\\):\\([0-9]+\\)-\\([0-9]+\\):\\([0-9]+\\)[ \t]+"
-           "\\([a-zA-Z_]+\\)[ \t]*-->[ \t]*$")
+           "\\([a-zA-Z_]+\\)[ \t]*-->"
+           pi-annotate--rule-suffix-regexp "$")
    (concat "^#[ \t]*annotate:#\\([0-9]+\\)[ \t]+"
            "\\([0-9]+\\):\\([0-9]+\\)-\\([0-9]+\\):\\([0-9]+\\)[ \t]+"
-           "\\([a-zA-Z_]+\\)[ \t]*$"))
+           "\\([a-zA-Z_]+\\)"
+           pi-annotate--rule-suffix-regexp "$"))
   "Regexps matching an annotation marker line, either comment style.")
 
 (defconst pi-annotate--end-marker-regexps
-  (list "^<!--[ \t]*/annotate[ \t]*-->[ \t]*$"
-        "^#[ \t]*/annotate[ \t]*$")
+  (list (concat "^<!--[ \t]*/annotate[ \t]*-->"
+                pi-annotate--rule-suffix-regexp "$")
+        (concat "^#[ \t]*/annotate" pi-annotate--rule-suffix-regexp "$"))
   "Regexps matching the end marker of a block.")
 
 (defconst pi-annotate--source-regexps
@@ -201,17 +220,28 @@ review."
       (format "# annotate:source %s" source-name)
     (format "<!-- annotate:source %s -->" source-name)))
 
-(defun pi-annotate--marker-line (style id kind span)
-  "Return the marker line for STYLE recording ID, KIND and SPAN.
-SPAN is a list of (START-LINE START-COL END-LINE END-COL)."
-  (cl-destructuring-bind (sl sc el ec) span
-    (if (eq style 'org)
-        (format "# annotate:#%d %d:%d-%d:%d %s" id sl sc el ec kind)
-      (format "<!-- annotate:#%d %d:%d-%d:%d %s -->" id sl sc el ec kind))))
+(defun pi-annotate--rule (text width)
+  "Return TEXT followed by enough rules to fill WIDTH columns."
+  (let ((pad (- width 1 (string-width text))))
+    (if (> pad 0)
+        (concat text " " (make-string pad pi-annotate--rule-char))
+      text)))
 
-(defun pi-annotate--end-marker (style)
-  "Return the end marker line for STYLE."
-  (if (eq style 'org) "# /annotate" "<!-- /annotate -->"))
+(defun pi-annotate--marker-line (style id kind span width)
+  "Return the rule line that opens the block for ID, KIND and SPAN.
+SPAN is a list of (START-LINE START-COL END-LINE END-COL); WIDTH is how
+many columns the rule should fill."
+  (cl-destructuring-bind (sl sc el ec) span
+    (pi-annotate--rule
+     (if (eq style 'org)
+         (format "# annotate:#%d %d:%d-%d:%d %s" id sl sc el ec kind)
+       (format "<!-- annotate:#%d %d:%d-%d:%d %s -->" id sl sc el ec kind))
+     width)))
+
+(defun pi-annotate--end-marker (style width)
+  "Return the rule line that closes a STYLE block, WIDTH columns wide."
+  (pi-annotate--rule (if (eq style 'org) "# /annotate" "<!-- /annotate -->")
+                     width))
 
 (defun pi-annotate--match-marker (line)
   "Return (ID SL SC EL EC KIND) when LINE is a marker line."
@@ -251,7 +281,7 @@ SPAN is a list of (START-LINE START-COL END-LINE END-COL)."
   blocks next-id active-id last-id
   anchors                        ; id -> (START-MARKER . END-MARKER) in main
   marks                          ; id -> highlight overlay in main
-  boxes                          ; list of decoration overlays in the sidecar
+  decorations                    ; id -> rule/highlight overlays in the sidecar
   sync-line                      ; line the two windows were last synced to
   window-config timer ended)
 
@@ -453,36 +483,17 @@ The end column is inclusive, matching the marker format."
 
 ;;;; Decoration
 
-(defun pi-annotate--box-width (review)
-  "Return the box width, in columns, for REVIEW's sidecar window."
+(defun pi-annotate--rule-width (review)
+  "Return the width, in columns, of REVIEW's rule lines."
   (let ((win (pi-annotate--review-sidecar-window review)))
-    (max 24 (1- (if (window-live-p win) (window-body-width win) 61)))))
+    (max 24 (1- (if (window-live-p win) (window-body-width win) 80)))))
 
 (defun pi-annotate--text-width (review)
   "Return the width available for note text in REVIEW."
-  (max 8 (- (pi-annotate--box-width review) 4)))
+  (max 20 (- (pi-annotate--rule-width review) 2)))
 
-(defun pi-annotate--label (review id kind)
-  "Return the box label for annotation ID of KIND in REVIEW."
-  (let ((span (pi-annotate--span-of review id)))
-    (if span
-        (format "%d:%d \u2192 %d:%d  %s"
-                (nth 0 span) (nth 1 span) (nth 2 span) (nth 3 span) kind)
-      (format "?  %s" kind))))
-
-(defun pi-annotate--top-border (width label)
-  "Return a box top border of WIDTH labelled LABEL."
-  (let* ((label-width (string-width label))
-         (width (if (< width (+ 5 label-width)) (+ 5 label-width) width))
-         (pad (- width 5 label-width)))
-    (concat "\u256d\u2500 " label " " (make-string (max 0 pad) ?\u2500) "\u256e")))
-
-(defun pi-annotate--bottom-border (width)
-  "Return a box bottom border of WIDTH."
-  (concat "\u2570" (make-string (max 0 (- width 2)) ?\u2500) "\u256f"))
-
-(defun pi-annotate--border-face (review id kind)
-  "Return the border face for annotation ID of KIND in REVIEW."
+(defun pi-annotate--rule-face (review id kind)
+  "Return the rule face for annotation ID of KIND in REVIEW."
   (cond
    ((eql id (pi-annotate--review-active-id review)) 'pi-annotate-box-active)
    ((string= kind "delete") 'pi-annotate-box-delete)
@@ -490,81 +501,106 @@ The end column is inclusive, matching the marker format."
 
 (defun pi-annotate--clear-decorations (review)
   "Remove every decoration overlay REVIEW owns."
-  (dolist (overlay (pi-annotate--review-boxes review))
-    (when (overlayp overlay) (delete-overlay overlay)))
-  (setf (pi-annotate--review-boxes review) nil))
+  (dolist (entry (pi-annotate--review-decorations review))
+    (dolist (overlay (cdr entry))
+      (when (overlayp overlay) (delete-overlay overlay))))
+  (setf (pi-annotate--review-decorations review) nil))
 
-(defun pi-annotate--render-boxes (review)
-  "Draw every annotation of REVIEW as a box in the sidecar."
+(defun pi-annotate--deco-same (a b)
+  "Return non-nil when decorations A and B draw the same thing."
+  (and (= (length a) (length b))
+       (cl-every #'equal a b)))
+
+(defun pi-annotate--deco-overlays (previous specs)
+  "Return overlays for SPECS, reusing those in PREVIOUS that still match.
+SPECS is a list of (START END DISPLAY FACE BEFORE-STRING).  Touching an
+overlay makes redisplay repaint its window from scratch, so an overlay whose
+position and decorations are unchanged is kept as is."
+  (let ((out nil))
+    (dolist (spec specs)
+      (cl-destructuring-bind (start end display face before) spec
+        (let* ((wanted (list display face before))
+               (hit (cl-find-if (lambda (overlay)
+                                  (and (overlayp overlay)
+                                       (eql (overlay-start overlay) start)
+                                       (eql (overlay-end overlay) end)
+                                       (pi-annotate--deco-same
+                                        (overlay-get overlay 'pi-annotate-deco)
+                                        wanted)))
+                                previous)))
+          (if hit
+              (progn
+                ;; one overlay per spec: a second identical spec must make its
+                ;; own overlay rather than share this one
+                (setq previous (delq hit previous))
+                (push hit out))
+            (let ((overlay (make-overlay start end)))
+              (overlay-put overlay 'pi-annotate-deco wanted)
+              (when display (overlay-put overlay 'display display))
+              (when face (overlay-put overlay 'face face))
+              (when before (overlay-put overlay 'before-string before))
+              (push overlay out))))))
+    (nreverse out)))
+
+(defun pi-annotate--deco-specs (review block)
+  "Return the overlay specs that dress BLOCK of REVIEW.
+They colour the rule lines that open and close the note; the note text
+itself is left as plain text, so the cursor in it is an ordinary cursor.
+Each spec is (START END DISPLAY FACE BEFORE-STRING), the form
+`pi-annotate--deco-overlays' reads."
+  (let ((face (pi-annotate--rule-face review (pi-annotate--block-id block)
+                                        (pi-annotate--block-kind block)))
+        (specs nil))
+    (push (list (marker-position (pi-annotate--block-marker-start block))
+                (marker-position (pi-annotate--block-marker-end block))
+                nil face nil)
+          specs)
+    (when (pi-annotate--block-end-start block)
+      (push (list (marker-position (pi-annotate--block-end-start block))
+                  (marker-position (pi-annotate--block-end-end block))
+                  nil face nil)
+            specs))
+    (nreverse specs)))
+
+(defun pi-annotate--render-decorations (review)
+  "Hide the sidecar's plumbing and colour every annotation's rules.
+Overlays that already match are left alone; only a rule whose position or
+face actually changed is rebuilt."
   (let* ((buffer (pi-annotate--review-sidecar-buffer review))
-         (width (pi-annotate--box-width review))
-         (overlays nil))
+         (old (pi-annotate--review-decorations review))
+         (groups nil)                   ; (KEY . SPECS) for this redraw
+         (overlays nil)
+         (kept nil))
     (with-current-buffer buffer
       (save-excursion
         ;; the source header is plumbing: keep it out of sight
         (goto-char (point-min))
         (when (pi-annotate--match-source
-               (buffer-substring-no-properties (line-beginning-position) (line-end-position)))
-          (let ((overlay (make-overlay (line-beginning-position) (line-end-position))))
-            (overlay-put overlay 'display "")
-            (push overlay overlays)))
-        (dolist (block (pi-annotate--review-blocks review))
-          (let* ((id (pi-annotate--block-id block))
-                 (kind (pi-annotate--block-kind block))
-                 (face (pi-annotate--border-face review id kind))
-                 (top (pi-annotate--top-border width (pi-annotate--label review id kind)))
-                 (bottom (pi-annotate--bottom-border width)))
-            ;; the marker line becomes the top border
-            (let ((overlay (make-overlay (marker-position (pi-annotate--block-marker-start block))
-                                         (marker-position (pi-annotate--block-marker-end block)))))
-              (overlay-put overlay 'display top)
-              (overlay-put overlay 'face face)
-              (push overlay overlays))
-            ;; each note line gets a left border before the text and a right
-            ;; border on its newline
-            (let ((start (marker-position (pi-annotate--block-body-start block)))
-                  (end (marker-position (pi-annotate--block-body-end block))))
-              (save-excursion
-                (goto-char start)
-                (while (< (point) (max (1+ start) end))
-                  (let* ((line-start (line-beginning-position))
-                         (line-end (line-end-position))
-                         (used (string-width
-                                (buffer-substring-no-properties line-start line-end)))
-                         ;; two columns go to the left border; the right border
-                         ;; lands on the box's last column
-                         (padding (max 0 (- width 3 used)))
-                         (overlay (make-overlay line-start line-end)))
-                    ;; `before-string' (rather than `line-prefix') because the
-                    ;; left border must be a displayed string; the window
-                    ;; truncates rather than wraps, so every note line is one
-                    ;; screen line
-                    (overlay-put overlay 'before-string
-                                 (propertize "\u2502 " 'face face))
-                    (push overlay overlays)
-                    ;; the right border is a display on the newline instead of
-                    ;; an `after-string': anything after the line's text is
-                    ;; drawn before the cursor, so the cursor would sit past
-                    ;; the border the whole time a note is being typed
-                    (when (< line-end (point-max))
-                      (let ((right (make-overlay line-end (1+ line-end))))
-                        (overlay-put right 'display
-                                     (concat (make-string padding ?\s)
-                                             (propertize "\u2502" 'face face)
-                                             "\n"))
-                        (push right overlays))))
-                  (forward-line 1))))
-            ;; the end marker becomes the bottom border
-            (when (pi-annotate--block-end-start block)
-              (let ((overlay (make-overlay (marker-position (pi-annotate--block-end-start block))
-                                           (marker-position (pi-annotate--block-end-end block)))))
-                (overlay-put overlay 'display bottom)
-                (overlay-put overlay 'face face)
-                (push overlay overlays))))))
-      (setf (pi-annotate--review-boxes review) (nreverse overlays)))))
+               (buffer-substring-no-properties (line-beginning-position)
+                                               (line-end-position)))
+          (push (cons 'source
+                      (list (list (line-beginning-position) (line-end-position)
+                                  "" nil nil)))
+                groups)))
+      (dolist (block (pi-annotate--review-blocks review))
+        (push (cons (pi-annotate--block-id block)
+                    (pi-annotate--deco-specs review block))
+              groups)))
+    (with-current-buffer buffer
+      (dolist (group groups)
+        (let ((made (pi-annotate--deco-overlays (cdr (assq (car group) old))
+                                                (cdr group))))
+          (setq kept (nconc made kept))
+          (push (cons (car group) made) overlays))))
+    ;; drop overlays no block claims any more
+    (dolist (entry old)
+      (dolist (overlay (cdr entry))
+        (when (and (overlayp overlay) (not (memq overlay kept)))
+          (delete-overlay overlay))))
+    (setf (pi-annotate--review-decorations review) (nreverse overlays))))
 
 (defun pi-annotate--render (review)
-  "Redraw REVIEW: re-read the sidecar, then highlight and box every block."
+  "Redraw REVIEW: re-read the sidecar, then highlight and dress every block."
   (when (pi-annotate--active-p)
     (pi-annotate--parse review)
     (let ((main (pi-annotate--review-main-buffer review))
@@ -595,8 +631,7 @@ The end column is inclusive, matching the marker format."
             (unless (memq (car entry) kept)
               (when (overlayp (cdr entry)) (delete-overlay (cdr entry))))))
         (setf (pi-annotate--review-marks review) marks)))
-    (pi-annotate--clear-decorations review)
-    (pi-annotate--render-boxes review)))
+    (pi-annotate--render-decorations review)))
 
 ;;;; Wrapping
 
@@ -604,7 +639,7 @@ The end column is inclusive, matching the marker format."
   "Wrap TEXT to WIDTH columns, starting each line with PREFIX.
 Greedy, by display width, and PREFIX goes on every line — the same shape as
 annotate.nvim's wrapping, which is why a single unbreakable token longer than
-the box can still cross its border."
+the line can still cross it."
   (let ((words (split-string (or text "") "[ \t\n]+" t))
         (prefix (or prefix ""))
         (lines nil)
@@ -621,7 +656,7 @@ the box can still cross its border."
     (nreverse lines)))
 
 (defun pi-annotate--reflow-block (review block)
-  "Re-wrap BLOCK of REVIEW when its text is wider than the box.
+  "Re-wrap BLOCK of REVIEW when its text is wider than the sidecar.
 Return non-nil when the buffer text changed."
   (let* ((width (pi-annotate--text-width review))
          (lines (pi-annotate--body-lines block))
@@ -719,10 +754,12 @@ Return non-nil when the buffer text changed."
 
 (defun pi-annotate--desired-lines (review)
   "Return the sidecar of REVIEW as a list of lines, padded for alignment."
-  (let* ((header (pi-annotate--header-line
-                  (pi-annotate--review-style review)
+  (let* ((style (pi-annotate--review-style review))
+         (width (pi-annotate--rule-width review))
+         (header (pi-annotate--header-line
+                  style
                   (file-name-nondirectory (pi-annotate--review-main-path review))))
-         (end-marker (pi-annotate--end-marker (pi-annotate--review-style review)))
+         (end-marker (pi-annotate--end-marker style width))
          (blocks (seq-sort
                   (lambda (a b)
                     (let ((sa (pi-annotate--span-of review (pi-annotate--block-id a)))
@@ -739,8 +776,9 @@ Return non-nil when the buffer text changed."
                (target (nth 0 span)))
           (while (< (length lines) (max 1 (1- target)))
             (push "" lines))
-          (push (pi-annotate--marker-line (pi-annotate--review-style review)
-                                          id (pi-annotate--block-kind block) span)
+          (push (pi-annotate--marker-line style
+                                          id (pi-annotate--block-kind block) span
+                                          width)
                 lines)
           (dolist (line (pi-annotate--body-lines block))
             (push line lines))
@@ -791,32 +829,58 @@ Return non-nil when the buffer changed."
                        (concat (mapconcat #'identity replacement "\n") "\n")
                      "")))
         (with-current-buffer buffer
-          (let ((pi-annotate--inhibit t))
+          (let* (;; where the cursor is, so the rewrite below can put it back:
+                 ;; deleting the region it sits in would otherwise park point
+                 ;; at the region's start, i.e. at the top of the sidecar
+                 (window (pi-annotate--review-sidecar-window review))
+                 (displayed (and (window-live-p window)
+                                 (eq (window-buffer window) buffer)))
+                 (here (if displayed (window-point window) (point)))
+                 (start (or (pi-annotate--line-start buffer (1+ prefix))
+                            (point-max)))
+                 (last-line (- n suffix))
+                 (inside (and (<= start here)
+                              (<= here (or (pi-annotate--line-start
+                                            buffer (1+ last-line))
+                                           (point-max)))))
+                 (line-offset (and inside (save-excursion
+                                            (goto-char here)
+                                            (- (line-number-at-pos) prefix))))
+                 (column (and inside (save-excursion
+                                       (goto-char here)
+                                       (current-column))))
+                 (pi-annotate--inhibit t))
             (save-excursion
               ;; the common head and tail are left alone, so point and the undo
               ;; history survive a redraw that only moves padding around
-              (let ((start (or (pi-annotate--line-start buffer (1+ prefix))
-                               (point-max)))
-                    (last-line (- n suffix)))
-                (when (> last-line prefix)
-                  (goto-char (pi-annotate--line-start buffer last-line))
-                  (delete-region start (min (point-max) (1+ (line-end-position)))))
-                (goto-char start)
-                (insert text)))))
+              (when (> last-line prefix)
+                (goto-char (pi-annotate--line-start buffer last-line))
+                (delete-region start (min (point-max) (1+ (line-end-position)))))
+              (goto-char start)
+              (insert text))
+            (when inside
+              (goto-char start)
+              (forward-line (max 0 (min (1- (max 1 (length replacement)))
+                                        (1- line-offset))))
+              (move-to-column column)
+              (when displayed
+                (set-window-point window (point))))))
         (pi-annotate--parse review)
         t))))
 
 (defun pi-annotate--sync-markers (review)
   "Refresh REVIEW's sidecar marker lines from the live anchors.
 Return non-nil when any marker line changed."
-  (let ((changed nil))
+  (let ((changed nil)
+        (style (pi-annotate--review-style review))
+        (width (pi-annotate--rule-width review)))
     (with-current-buffer (pi-annotate--review-sidecar-buffer review)
       (dolist (block (pi-annotate--review-blocks review))
         (let* ((id (pi-annotate--block-id block))
                (span (pi-annotate--span-of review id))
                (want (and span (pi-annotate--marker-line
-                                (pi-annotate--review-style review)
-                                id (pi-annotate--block-kind block) span)))
+                                style
+                                id (pi-annotate--block-kind block) span width)))
                (start (marker-position (pi-annotate--block-marker-start block)))
                (end (marker-position (pi-annotate--block-marker-end block))))
           (when (and want start end)
@@ -831,7 +895,7 @@ Return non-nil when any marker line changed."
     changed))
 
 (defun pi-annotate--relayout (review)
-  "Re-pad REVIEW's sidecar so each box sits on its text's line."
+  "Re-pad REVIEW's sidecar so each annotation sits on its text's line."
   (when (and (pi-annotate--active-p)
              (not (pi-annotate--review-ended review)))
     (pi-annotate--parse review)
@@ -877,28 +941,40 @@ The previous window layout is remembered and put back when the review ends."
     (setf (pi-annotate--review-window-config review) (current-window-configuration))
     (delete-other-windows main-window)
     (set-window-buffer main-window main)
-    (setq sidecar-window (split-window-right (pi-annotate--sidecar-width)))
+    ;; a negative SIZE gives the *new* (right-hand) window that many columns
+    (setq sidecar-window (split-window-right (- (pi-annotate--sidecar-width))))
     (set-window-buffer sidecar-window sidecar)
     (set-window-parameter main-window 'pi-annotate t)
     (set-window-parameter sidecar-window 'pi-annotate t)
+    (setf (pi-annotate--review-main-window review) main-window
+          (pi-annotate--review-sidecar-window review) sidecar-window)
+    (set-window-margins sidecar-window 0 0)
     (with-current-buffer sidecar
       (setq-local truncate-lines t)
       (setq-local word-wrap nil)
       (setq-local display-line-numbers nil)
       (display-line-numbers-mode -1)
-      (setq-local fill-column (pi-annotate--text-width review))
-      (when pi-annotate-autoformat
-        (auto-fill-mode 1)))
+      ;; The buffer's own modes may want to centre or soft-wrap prose (the
+      ;; user's org hooks turned on `visual-fill-column-mode' and
+      ;; `visual-line-mode'): both fight the fixed line layout below, and the
+      ;; fill-column margins leave the rules short of the window.
+      (when (fboundp 'visual-line-mode) (visual-line-mode -1))
+      (when (fboundp 'visual-fill-column-mode) (visual-fill-column-mode -1))
+      ;; The sidecar is laid out on the reviewed file's line numbers, so each
+      ;; note must stay one screen line: overlong notes are wrapped into real
+      ;; lines by `pi-annotate--reflow' once typing stops, not soft-wrapped by
+      ;; redisplay.  No `auto-fill-mode' either: it would insert fill breaks
+      ;; on its own schedule, in the middle of a note.
+      (setq-local fill-column (pi-annotate--text-width review)))
     (with-current-buffer main
       (setq-local truncate-lines nil))
-    (setf (pi-annotate--review-main-window review) main-window
-          (pi-annotate--review-sidecar-window review) sidecar-window)
     (setf (pi-annotate--review-sync-line review) 1)
     (select-window main-window)
     (set-window-start main-window (point-min) t)
     (set-window-start sidecar-window (point-min) t)
     (set-window-hscroll sidecar-window 0)
-    (set-window-hscroll main-window 0)))
+    (set-window-hscroll main-window 0)
+    (add-hook 'window-size-change-functions #'pi-annotate--window-size-changed)))
 
 (defun pi-annotate--line-number (buffer position)
   "Return the 1-based line number of POSITION in BUFFER."
@@ -924,9 +1000,17 @@ an echo of this call and does not drag WINDOW back."
                     (pi-annotate--review-main-window review))))
       (when (and (window-live-p other)
                  (not (eq other window))
+                 ;; never scroll the window the user is in.  Following the
+                 ;; other window means calling `set-window-start' here, and
+                 ;; Emacs moves the window's point to the new start whenever
+                 ;; the old point falls outside it: in the sidecar that is
+                 ;; the cursor jumping from the note being typed to the top
+                 ;; of the buffer, and the next keystroke landing there.
+                 ;; Only the window that is not being typed in follows.
+                 (not (eq other (selected-window)))
                  (window-parameter other 'pi-annotate))
         (let* ((line (pi-annotate--line-number buffer new-start))
-               ;; the sidecar stops at its last box, so it is often shorter
+               ;; the sidecar stops at its last note, so it is often shorter
                ;; than the reviewed file: a line it cannot show would map back
                ;; to a different one, so stop at its last line instead
                (other-buffer (window-buffer other))
@@ -959,25 +1043,7 @@ an echo of this call and does not drag WINDOW back."
 (defun pi-annotate--after-command ()
   "Post-command hook for REVIEW's buffers."
   (when (pi-annotate--active-p)
-    ;; The box is drawn by *replacing* characters: each note line's newline
-    ;; carries the right border as a display string, and the marker lines are
-    ;; replaced by the top and bottom borders.  After every command the
-    ;; command loop pulls point out of replaced text, so typing at the end of
-    ;; a note would leave point past that newline, on the end-marker line;
-    ;; the next character would then be inserted before `# /annotate', and
-    ;; the block could no longer be parsed.  Both review buffers are display:
-    ;; keep point exactly where the user put it.
-    (setq disable-point-adjustment t)
-    (pi-annotate--update-active)
-    ;; the boxes are drawn to the window width, so no review window should
-    ;; ever be scrolled sideways.  Redisplay scrolls a window horizontally to
-    ;; reach a cursor past the last column, which slides the whole sidecar
-    ;; left, under the reviewed file; undo that before it can settle.
-    (dolist (window (list (pi-annotate--review-main-window pi-annotate--review)
-                          (pi-annotate--review-sidecar-window pi-annotate--review)))
-      (when (and (window-live-p window)
-                 (/= (window-hscroll window) 0))
-        (set-window-hscroll window 0)))))
+    (pi-annotate--update-active)))
 
 ;;;; Change hooks and redraw scheduling
 
@@ -987,17 +1053,22 @@ an echo of this call and does not drag WINDOW back."
              (not pi-annotate--inhibit)
              (not (pi-annotate--review-ended pi-annotate--review)))
     (let ((review pi-annotate--review))
-      (unless (timerp (pi-annotate--review-timer review))
-        (setf (pi-annotate--review-timer review)
-              (run-with-idle-timer
-               0.25 nil
-               (lambda ()
-                 (when (eq review pi-annotate--review)
-                   (setf (pi-annotate--review-timer review) nil)
-                   (pi-annotate--flush)))))))))
+      ;; Restart the countdown on every change.  Keeping the timer armed from
+      ;; the first edit instead would let it fire in the middle of a note,
+      ;; where the redraw -- parse, relayout, re-dress and autosave -- lands
+      ;; between two keystrokes and makes typing feel laggy.
+      (when (timerp (pi-annotate--review-timer review))
+        (cancel-timer (pi-annotate--review-timer review)))
+      (setf (pi-annotate--review-timer review)
+            (run-with-idle-timer
+             pi-annotate-redraw-idle nil
+             (lambda ()
+               (when (eq review pi-annotate--review)
+                 (setf (pi-annotate--review-timer review) nil)
+                 (pi-annotate--flush))))))))
 
 (defun pi-annotate--flush ()
-  "Bring the sidecar, the highlights and the boxes back in step."
+  "Bring the sidecar, the highlights and the rules back in step."
   (when (and (pi-annotate--active-p)
              (not (pi-annotate--review-ended pi-annotate--review)))
     (let ((review pi-annotate--review))
@@ -1032,8 +1103,8 @@ an echo of this call and does not drag WINDOW back."
                 (equal (pi-annotate--span-of review (pi-annotate--block-id block)) span))
               (pi-annotate--review-blocks review)))
 
-(defun pi-annotate--goto-box (review id)
-  "Move the cursor into annotation ID's box in REVIEW."
+(defun pi-annotate--goto-note (review id)
+  "Move the cursor into annotation ID's note in REVIEW."
   (let ((block (cl-find id (pi-annotate--review-blocks review)
                         :key #'pi-annotate--block-id)))
     (when block
@@ -1070,7 +1141,8 @@ deletion matches the range the marker names."
          (span (pi-annotate--span-from-region begin end))
          (main (pi-annotate--review-main-buffer review))
          (style (pi-annotate--review-style review))
-         (end-marker (pi-annotate--end-marker style))
+         (width (pi-annotate--rule-width review))
+         (end-marker (pi-annotate--end-marker style width))
          (start-pos (pi-annotate--pos-of main (nth 0 span) (nth 1 span)))
          (end-pos (min (point-max)
                        (pi-annotate--pos-of main (nth 2 span) (1+ (nth 3 span)))))
@@ -1085,10 +1157,10 @@ deletion matches the range the marker names."
                         (min start-pos end-pos) (max start-pos end-pos))
                        "\n")))))
     (setf (pi-annotate--review-next-id review) (1+ id))
-    ;; anchor first: relayout reads the anchor back to place the box
+    ;; anchor first: relayout reads the anchor back to place the note
     (push (cons id (cons (copy-marker start-pos nil) (copy-marker end-pos t)))
           (pi-annotate--review-anchors review))
-    (let ((lines (append (list (pi-annotate--marker-line style id kind span))
+    (let ((lines (append (list (pi-annotate--marker-line style id kind span width))
                          (or quote-lines (list ""))
                          (list end-marker))))
       (with-current-buffer (pi-annotate--review-sidecar-buffer review)
@@ -1133,12 +1205,12 @@ deletion matches the range the marker names."
          (span (pi-annotate--span-from-region (car region) (cdr region)))
          (existing (pi-annotate--block-for-span review span)))
     (if existing
-        (pi-annotate--goto-box review (pi-annotate--block-id existing))
+        (pi-annotate--goto-note review (pi-annotate--block-id existing))
       (let ((id (pi-annotate--insert-block review "comment" (car region) (cdr region))))
         (pi-annotate--relayout review)
         (pi-annotate--render review)
         (pi-annotate--save-sidecar-only review)
-        (pi-annotate--goto-box review id)))))
+        (pi-annotate--goto-note review id)))))
 
 (defun pi-annotate-delete ()
   "Mark the active region for deletion, or unmark an identical range."
@@ -1156,7 +1228,7 @@ deletion matches the range the marker names."
       (message "pi-annotate: removed deletion mark at %d:%d \u2192 %d:%d"
                (nth 0 span) (nth 1 span) (nth 2 span) (nth 3 span)))
      (existing
-      (pi-annotate--goto-box review (pi-annotate--block-id existing)))
+      (pi-annotate--goto-note review (pi-annotate--block-id existing)))
      (t
       (let ((id (pi-annotate--insert-block review "delete" (car region) (cdr region))))
         (pi-annotate--relayout review)
@@ -1176,12 +1248,12 @@ deletion matches the range the marker names."
       (if (pi-annotate--review-last-id review)
           (if (eq (current-buffer) (pi-annotate--review-sidecar-buffer review))
               (pi-annotate--goto-text review (pi-annotate--review-last-id review))
-            (pi-annotate--goto-box review (pi-annotate--review-last-id review)))
+            (pi-annotate--goto-note review (pi-annotate--review-last-id review)))
         (user-error "No annotation here yet")))
      ((eq (current-buffer) (pi-annotate--review-sidecar-buffer review))
       (pi-annotate--goto-text review (pi-annotate--block-id block)))
      (t
-      (pi-annotate--goto-box review (pi-annotate--block-id block))))))
+      (pi-annotate--goto-note review (pi-annotate--block-id block))))))
 
 (defun pi-annotate-clear ()
   "Remove the annotation at the cursor."
@@ -1229,6 +1301,7 @@ deletion matches the range the marker names."
         (remove-hook 'window-scroll-functions #'pi-annotate--scroll-all t)
         (when (bound-and-true-p pi-annotate-mode)
           (pi-annotate-mode -1)))))
+  (remove-hook 'window-size-change-functions #'pi-annotate--window-size-changed)
   (let ((sidecar (pi-annotate--review-sidecar-buffer review))
         (window (pi-annotate--review-sidecar-window review))
         (config (pi-annotate--review-window-config review)))
@@ -1355,6 +1428,13 @@ deletion matches the range the marker names."
       (add-hook 'kill-buffer-hook #'pi-annotate--buffer-killed nil t)
       (pi-annotate-mode 1))))
 
+(defun pi-annotate--window-size-changed (&rest _)
+  "Arrange a redraw after the review windows change size.
+The rules in the sidecar are drawn to the window width, so a resize leaves
+them too long or too short until the next redraw."
+  (when (pi-annotate--active-p)
+    (pi-annotate--schedule)))
+
 ;;;###autoload
 (defun pi-annotate-open (path result-file)
   "Review PATH in this Emacs, reporting the outcome to RESULT-FILE.
@@ -1372,7 +1452,7 @@ Called by pi's /annotate command through `emacsclient --eval'."
                   :main-path main-path :sidecar-path sidecar-path
                   :result-file (expand-file-name result-file)
                   :style style
-                  :blocks nil :anchors nil :marks nil :boxes nil
+                  :blocks nil :anchors nil :marks nil :decorations nil
                   :sync-line nil
                   :next-id 1 :active-id nil :last-id nil :ended nil)))
     (unless (file-readable-p main-path)
