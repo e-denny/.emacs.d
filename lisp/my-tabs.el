@@ -38,10 +38,13 @@
 ;;
 ;; --------------------------------------------------------------- tab line
 ;;
-;; The tab line is the buffer switcher, and it follows the blog exactly: the
+;; The tab line is the buffer switcher, and it follows the blog's shape: the
 ;; tabs are the buffers of the current project, sorted alphabetically
-;; (`tab-line-tabs-buffer-group-sort-function'), with no new-tab and no
-;; close button.  `tab-line-tabs-buffer-groups' would group by project too,
+;; (`tab-line-tabs-buffer-group-sort-function'), with no new-tab.  Each tab
+;; starts with its buffer's file type icon (`nerd-icons') and ends with a
+;; cross that closes it, which is `tab-line-close-button' redrawn as a Nerd
+;; Font glyph so it sits in the tab's own color instead of as an SVG image.
+;; `tab-line-tabs-buffer-groups' would group by project too,
 ;; but since Emacs 30 it leads the group with a tab that names the project
 ;; and expands into a list of groups; the tab bar above already has one chip
 ;; per project, so that group tab would only repeat it above every window.
@@ -62,6 +65,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'nerd-icons)
 (require 'project)
 (require 'seq)
 (require 'tab-bar)
@@ -259,19 +263,74 @@ is not repeated above every window when the tab bar already names it."
         (seq-sort tab-line-tabs-buffer-group-sort-function buffers)
       buffers)))
 
+(defun my-tabs-buffer-icon (buffer face)
+  "Icon naming BUFFER's file type, followed by a space, or nil.
+A Dired buffer gets a folder, a file buffer the icon for its extension,
+anything else the icon for its major mode.  FACE, the tab's own face, is
+appended under the glyph so the pill's background runs beneath it.  It
+has to come after the glyph's own face, because the first value given for
+a face attribute in a face list wins, and the glyph's color is the one to
+keep: prepending the tab's face would paint every icon in the tab's
+foreground."
+  (when (bufferp buffer)
+    (let ((icon (ignore-errors
+                  (with-current-buffer buffer
+                    (cond ((and (derived-mode-p 'dired-mode)
+                                (bound-and-true-p dired-directory))
+                           (nerd-icons-icon-for-dir dired-directory))
+                          (buffer-file-name
+                           (nerd-icons-icon-for-file buffer-file-name))
+                          (t (nerd-icons-icon-for-mode major-mode)))))))
+      (when (and icon (not (equal icon "")))
+        ;; Copied first: `nerd-icons' can hand back a string it keeps (see
+        ;; `nerd-icons-cache'), and `add-face-text-property' mutates its
+        ;; argument, so the tab's face would pile up on that shared glyph.
+        (setq icon (copy-sequence icon))
+        (add-face-text-property 0 (length icon) face t icon)
+        ;; The space is propertized too: a bare one would show the frame's
+        ;; background between the icon and the name, a notch in the pill.
+        (concat icon (propertize " " 'face face))))))
+
 (defun my-tabs-tab-line-name-format (tab tabs)
-  "Format TAB as a pill, like `tab-line-tab-name-format-default'.
+  "Format TAB as a pill: its file type icon, name and close button.
 The default formatter does the real work -- the name, the close button,
 the keymap, the face `tab-line-tab-face-functions' settles on -- and its
-result is then wrapped in the edge glyphs."
-  (let ((text (tab-line-tab-name-format-default tab tabs)))
-    (my-tabs--pill text (get-text-property 0 'face text) 'tab-line)))
+result is then wrapped in the edge glyphs, with the buffer's icon put in
+front of the name."
+  (let* ((text (tab-line-tab-name-format-default tab tabs))
+         ;; Read the face off the name, before the icon's own face is in
+         ;; front of it: the icon has no background of its own.
+         (face (get-text-property 0 'face text)))
+    (my-tabs--pill (concat (my-tabs-buffer-icon tab face) text)
+                   face 'tab-line)))
+
+;; The blog's close cross is `tab-line-close-button', drawn as an SVG image
+;; on a graphical frame; redraw it as the Material Design "x", which the
+;; Nerd Font already installed for `doom-modeline' supplies.  The default
+;; formatter adds the tab's face over the whole button afterwards, so the
+;; glyph ends up in the tab's own foreground and the space in front of it in
+;; the tab's background, rather than as a grey image that ignores the theme.
+(setq tab-line-close-button
+      (propertize (concat " " (nerd-icons-mdicon "nf-md-close"))
+                  'rear-nonsticky nil ; important to not break auto-scroll
+                  'keymap tab-line-tab-close-map
+                  'mouse-face 'tab-line-close-highlight
+                  'help-echo "Click to close tab"))
+
+;; `ghostel' terminals are the one buffer in this config that `nerd-icons'
+;; has no icon for, so they would all wear the Emacs logo that stands in for
+;; `fundamental-mode'.  Give them the terminal glyph the other shells get.
+(add-to-list 'nerd-icons-mode-icon-alist
+             '(ghostel-mode nerd-icons-devicon "nf-dev-terminal"
+               :face nerd-icons-lgreen))
 
 (setq tab-line-tabs-function #'my-tabs-tab-line-buffers
       tab-line-tab-name-format-function #'my-tabs-tab-line-name-format
-      ;; The blog's two switches: no plus-shaped button and no close cross.
+      ;; The blog's switch: no plus-shaped button.  The close cross stays,
+      ;; on every tab; set this to `selected' to keep it only on the tab
+      ;; the window is showing.
       tab-line-new-button-show nil
-      tab-line-close-button-show nil
+      tab-line-close-button-show t
       ;; The pills butt against each other; `my-tabs--pill' supplies the
       ;; padding, so the tab line's own separator would only add a gap.
       tab-line-separator "")
