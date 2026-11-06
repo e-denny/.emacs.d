@@ -476,6 +476,13 @@ on `kill-emacs-query-functions'."
   ;; New, deleted and renamed entries now arrive on their own, so the
   ;; "Reverting buffer" line for every one of them would be noise.
   (setq auto-revert-verbose nil)
+  ;; Walking into a directory -- RET, `^' or a mouse click -- replaces the
+  ;; listing instead of opening a second Dired buffer for the new directory
+  ;; and leaving the old one behind: the buffer being left is killed, as
+  ;; `find-alternate-file' would. Emacs does this only while the Dired
+  ;; buffer sits in one window, so a second window on the same listing is
+  ;; left alone rather than pulled out from under it.
+  (setq dired-kill-when-opening-new-dired-buffer t)
   :hook (dired-mode . auto-revert-mode))
 
 ;; ----------------------------------------------------------------------
