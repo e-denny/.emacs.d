@@ -385,30 +385,16 @@ for the whole of a command, and nil in a timer or a filter."
         which-key-add-column-padding 1
         which-key-show-early-on-C-h t))
 
-;; which-key-posframe -- draw that list in a child frame against the right
-;; edge of the frame instead of in the side window which-key uses by default.
-;; The poshandler is written here because posframe's own `frame-*' corner
-;; handlers return a marker position that only means anything to a
-;; refposhandler, which this package does not pass; they end up at the left.
-;; This one is measured from the frame's left edge, so the popup stays on the
-;; frame's right wherever the selected window happens to be -- which the
-;; window-relative handler it replaced could not promise.  Its top is the top
-;; of the frame, over the empty right end of the tab bar.  One column makes
-;; the list read downwards along that edge: `which-key--create-pages' lays the
-;; keys out vertically when `which-key-max-display-columns' is 1.
-(defun my-which-key-posframe-position (info)
-  "Put the which-key posframe at the top right corner of the frame.
-INFO is the plist `posframe-show' hands its poshandler; the x coordinate
-is the frame's width less the popup's own, both in pixels."
-  (cons (- (plist-get info :parent-frame-width)
-           (plist-get info :posframe-width))
-        0))
-
+;; which-key-posframe -- draw that list in a child frame in the bottom right
+;; corner of the frame instead of in the side window which-key uses by
+;; default, out of the way of the buffer being worked in.  One column makes
+;; the list read downwards along that edge: `which-key--create-pages' lays
+;; the keys out vertically when `which-key-max-display-columns' is 1.
 (use-package which-key-posframe
   :ensure t
   :after which-key
   :config
-  (setq which-key-posframe-poshandler #'my-which-key-posframe-position
+  (setq which-key-posframe-poshandler #'my-posframe-bottom-right
         which-key-max-display-columns 1)
   (which-key-posframe-mode 1))
 
