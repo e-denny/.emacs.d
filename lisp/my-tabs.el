@@ -165,23 +165,49 @@ Nil when no tab belongs to it yet."
                               dir))
              return i)))
 
+(defun my-tab-bar-rename-tab-if-anonymous (&optional tab)
+  "Name TAB explicitly after the name it already shows.
+`tab-bar-tab-name-function' recomputes the name of every tab that was never
+named by hand, so a tab with no `explicit-name' is renamed as soon as the
+name function changes value -- including while a new tab is being made with
+it bound.  Pinning the tab being left keeps the chip it was already showing."
+  (let ((tab (or tab (assq 'current-tab (funcall tab-bar-tabs-function)))))
+    (when (and tab (null (alist-get 'explicit-name tab)))
+      (tab-bar-rename-tab (alist-get 'name tab)))))
+
 (defun my-tab-bar-select-project (root)
   "Switch to the tab for project ROOT, creating that tab if necessary.
 The new tab shows the project's most recent buffer, or Dired at ROOT when
-the project has no buffer yet. A remembered project whose directory has
-since disappeared says so instead of half-creating a tab."
+the project has no buffer yet.  A remembered project whose directory has
+since disappeared says so instead of half-creating a tab.
+
+What the tab shows, how it is named and which group it belongs to are all
+put in place *before* the tab exists, through the bindings `tab-bar' offers
+for exactly that (`tab-bar-new-tab-choice', `tab-bar-tab-name-function',
+`tab-bar-new-tab-group'), rather than switching its buffer and renaming it
+afterwards.  Anything that reads the new tab while it is being made -- the
+bar's own chip, a treemacs workspace keyed by tab name -- then sees the
+project itself, not the tab this one was split off from."
   (if-let* ((index (my-tab-bar-project-tab-index root)))
       (tab-bar-select-tab (1+ index))
     (let* ((proj (ignore-errors (project-current nil root)))
-           (buf  (and proj (car (project-buffers proj)))))
+           (buf  (and proj (car (project-buffers proj))))
+           (name (my-tab-bar-project-name root)))
       (unless (or (buffer-live-p buf) (file-directory-p root))
         (user-error "Project directory missing: %s" root))
-      (tab-bar-new-tab)
-      (if (buffer-live-p buf)
-          (switch-to-buffer buf)
-        (dired root))
-      (tab-bar-rename-tab (my-tab-bar-project-name root))
-      (tab-bar-change-tab-group (my-tab-bar-project-directory root)))))
+      (my-tab-bar-rename-tab-if-anonymous)
+      (let ((tab-bar-new-tab-choice
+             ;; Called by `tab-bar-new-tab-to' before it names the tab; the
+             ;; Dired listing is made without being shown, so that the tab is
+             ;; created on it rather than the old tab being repurposed.
+             (lambda () (or (and (buffer-live-p buf) buf)
+                            (dired-noselect root))))
+            (tab-bar-tab-name-function (lambda () name))
+            (tab-bar-new-tab-group (my-tab-bar-project-directory root)))
+        (tab-bar-new-tab))
+      ;; Tie the name down: a tab without an explicit name has its chip
+      ;; recomputed from whatever buffer it happens to be showing.
+      (tab-bar-rename-tab name))))
 
 (defun my-tab-bar-format-projects ()
   "Produce one clickable chip per known project, dressed as a pill.

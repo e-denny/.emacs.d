@@ -609,6 +609,24 @@ on `kill-emacs-query-functions'."
   :config
   (treemacs-git-mode 'deferred))         ; async git status, cheaper
 
+;; treemacs-tab-bar -- one tree per tab-bar tab.  Treemacs ties a tree buffer
+;; and its workspace to a "scope", and ships with a single scope type,
+;; `Frames' (one tree per frame); this extension adds `Tabs'.  Each tab gets
+;; its own buffer and workspace, named after the tab and filled with the
+;; project `project.el' finds in the tab's buffer the first time the tab is
+;; visited, switched by the tab bar's own hooks and dropped when the tab
+;; closes.  The trees keep their space-prefixed buffer names, so the tab line
+;; goes on ignoring them.  `treemacs-scope-types' lists the choices; the
+;; interactive picker is `treemacs-select-buffer-scope-type'.
+(use-package treemacs-tab-bar
+  :ensure t
+  :after treemacs
+  :config
+  ;; Treemacs only knows `Tabs' after this runs, and it kills any tree windows
+  ;; it finds, so it belongs here, at the package's first load (the first
+  ;; `C-c T'), before a tree is drawn.
+  (treemacs-set-scope-type 'Tabs))
+
 ;; ----------------------------------------------------------------------
 ;; markdown
 ;; ----------------------------------------------------------------------
