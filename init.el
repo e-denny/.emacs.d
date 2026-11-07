@@ -615,6 +615,47 @@ on `kill-emacs-query-functions'."
   :config
   (treemacs-git-mode 'deferred))         ; async git status, cheaper
 
+;; Treemacs' own colours, re-tuned for a reading eye.  Two of its git states
+;; are drawn in the dimmest font-lock faces -- an ignored file in
+;; `font-lock-comment-face', an untracked one in `font-lock-doc-face' -- which
+;; `doom-one' leaves at #5B6268 and #83898D on a #282C34 background.  A
+;; directory listing is mostly ignored paths (caches, `elpa/', build output),
+;; so most of the tree came out at a contrast near 2:1, unreadable.  Both are
+;; blended half-way into the theme's own foreground: they keep their hue, and
+;; land around 4.5:1 and 5.7:1.  The selected line goes the other way --
+;; `hl-line' is #21242B, a shade *below* the background, so the row being
+;; followed is invisible in a side window -- and takes the theme's selection
+;; colour instead.  Both are redone on every theme change, because `C-c t'
+;; flips the palette and `load-theme' puts the faces back.
+(defun my-treemacs--blend (color other alpha)
+  "Return COLOR mixed into OTHER by ALPHA, as a hex colour.
+Both are colour names; ALPHA is how much of COLOR survives."
+  (apply #'color-rgb-to-hex
+         (append (color-blend (color-name-to-rgb color)
+                              (color-name-to-rgb other)
+                              alpha)
+                 ;; Two hex digits per component, not the default four.
+                 '(2))))
+
+(defun my-treemacs-colors (&rest _)
+  "Brighten treemacs' two dim git states and its line highlight."
+  (let ((fg (face-attribute 'default :foreground nil t)))
+    (when (color-name-to-rgb fg)
+      (dolist (pair '((treemacs-git-ignored-face   font-lock-comment-face)
+                      (treemacs-git-untracked-face font-lock-doc-face)))
+        (let ((color (face-attribute (cadr pair) :foreground nil t)))
+          (when (color-name-to-rgb color)
+            (set-face-attribute (car pair) nil :foreground
+                                (my-treemacs--blend color fg 0.5)))))
+      (let ((selection (face-attribute 'region :background nil t)))
+        (when (color-name-to-rgb selection)
+          (set-face-attribute 'treemacs-hl-line-face nil
+                              :background selection))))))
+
+(with-eval-after-load 'treemacs
+  (my-treemacs-colors)
+  (add-hook 'enable-theme-functions #'my-treemacs-colors))
+
 ;; treemacs-tab-bar -- one tree per tab-bar tab.  Treemacs ties a tree buffer
 ;; and its workspace to a "scope", and ships with a single scope type,
 ;; `Frames' (one tree per frame); this extension adds `Tabs'.  Each tab gets
