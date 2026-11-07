@@ -280,6 +280,92 @@
          ("C-c s d" . easysession-delete)))
 
 ;; ----------------------------------------------------------------------
+;; posframe popups: the frame's corners, and the message buffers
+;; ----------------------------------------------------------------------
+
+;; Two position handlers, both measured against the frame rather than the
+;; window, so a popup stays put while the windows are split around it.
+;; Posframe's own `frame-*' corner handlers cannot be used for this: they
+;; return a marker position that only means anything to a refposhandler,
+;; which neither caller passes, and so land at the left edge.  Everything
+;; needed is in the plist `posframe-show' hands its poshandler.
+(defun my-posframe-top-right (info)
+  "Position handler: the top right corner of the frame."
+  (cons (- (plist-get info :parent-frame-width)
+           (plist-get info :posframe-width))
+        0))
+
+(defun my-posframe-bottom-right (info)
+  "Position handler: the bottom right corner of the frame's text area.
+The bottom leaves out the mode line and the minibuffer, the way
+`posframe-poshandler-frame-bottom-right-corner' would if it returned
+absolute coordinates instead of a marker."
+  (cons (- (plist-get info :parent-frame-width)
+           (plist-get info :posframe-width))
+        (- (plist-get info :parent-frame-height)
+           (plist-get info :posframe-height)
+           (plist-get info :mode-line-height)
+           (plist-get info :minibuffer-height))))
+
+;; Warnings, the message log and byte-compilation errors are things to glance
+;; at, and Emacs's answer -- split a window open along the bottom of the
+;; frame and leave it there -- costs a split, shifts the text being read and
+;; has to be closed by hand afterwards.  They go into a child frame in the
+;; top right corner instead, over the least-used part of the frame, and it
+;; takes itself away after eight seconds.  `display-buffer' is where a
+;; buffer's window is decided and `display-buffer-alist' overrides whatever
+;; window the caller asked for, so the entries below replace it.
+;;
+;; Which displays get the posframe matters as much as where it is: only the
+;; ones Emacs puts up by itself.  Looking at one of these buffers on purpose
+;; (`C-x b', `C-x 4 b', `C-h e') has to give a window to read it in, so the
+;; action below checks how it was called -- see its docstring.
+;;
+;; The action returns the symbol `fail': no window, and no falling through to
+;; the default action.  Returning nil there would let `display-buffer' split
+;; a window open anyway, and returning a window would hand it to
+;; `warning--display-buffer', which then moves point to the end of the
+;; warning buffer in the window it was given -- the one being read.
+;;
+;; `*compilation*', `*grep*' and the like are deliberately absent: those are
+;; worked in (next error, previous error), not glanced at.
+(defvar my-posframe-message-timeout 8
+  "Seconds a message posframe stays on screen.")
+
+(defun my-posframe-display-message-buffer (buffer alist)
+  "Show BUFFER in a posframe for `my-posframe-message-timeout' seconds.
+Return `fail', so that `display-buffer' stops here and makes no window.
+
+Only two kinds of display reach the posframe, and both are Emacs acting on
+its own.  A warning, which Emacs tags with the `warning' category in its
+display action however it was raised -- including from inside a command
+that ran into one.  And a log buffer put up while no command is running at
+all, which is a timer or a process filter talking.  Anything a command
+asks for is left to `display-buffer': `C-x b', `C-x 4 b' and `C-h e' run as
+commands, so looking at one of these buffers on purpose still gives a
+window to read it in.  `this-command' is the test for that -- it is bound
+for the whole of a command, and nil in a timer or a filter."
+  (when (and (posframe-workable-p)
+             (or (eq (alist-get 'category alist) 'warning)
+                 (null this-command)))
+    (posframe-show buffer
+                   :poshandler #'my-posframe-top-right
+                   :timeout my-posframe-message-timeout
+                   :max-height 15
+                   :max-width 100
+                   :border-width 1
+                   :border-color (face-attribute 'region :background nil t)
+                   ;; Show the newest lines, not the beginning of the log.
+                   :window-point (with-current-buffer buffer (point-max))
+                   ;; Nothing but the timer above takes it away.
+                   :hidehandler #'ignore)
+    'fail))
+
+(dolist (name '("\\*Warnings\\*" "\\*Compile-Log\\*" "\\*Messages\\*"))
+  (add-to-list 'display-buffer-alist
+               `(,name (my-posframe-display-message-buffer))))
+
+;; ----------------------------------------------------------------------
 ;; which-key (with its posframe) and project (the latter built in)
 ;; ----------------------------------------------------------------------
 
