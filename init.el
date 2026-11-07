@@ -80,7 +80,8 @@
 ;; ----------------------------------------------------------------------
 
 ;; ----------------------------------------------------------------------
-;; completion stack: vertico + consult + corfu + marginalia + embark
+;; completion stack: vertico + orderless + consult + corfu + marginalia +
+;; embark
 ;; ----------------------------------------------------------------------
 
 ;; Vertico -- vertical completion UI in the minibuffer.
@@ -90,6 +91,33 @@
   :ensure t
   :init
   (vertico-mode 1))
+
+;; Orderless -- match the input out of order and in pieces. The pattern is
+;; split on spaces and a candidate must match every word, wherever it appears
+;; and in whatever order, so `li my' finds `lisp/my-tabs.el' and `M-x ins pac'
+;; finds `package-install'. It is a completion *style*, not a UI, and needs no
+;; binding of its own: Vertico, Consult and Corfu all filter through
+;; `completion-styles', so this one setting reaches the minibuffer list, the
+;; in-buffer popup and consult-line, keep-lines and focus-lines, which filter
+;; with the global styles rather than the buffer's. (Consult's asynchronous
+;; greps split their input into words themselves, and need nothing here.)
+;;
+;; `basic' stays behind it as the fallback, because dynamic completion tables
+;; (`completion-table-dynamic', `completion-table-in-turn') only work through
+;; a style that asks them for candidates.
+;;
+;; Completion of file names is the exception, and takes the package's own
+;; recommendation: the category keeps `partial-completion' alone, which leaves
+;; paths typable the old way (`/u/s/l' for `/usr/share/local'), lets TRAMP
+;; hosts complete, and keeps wildcards; `completion-pcm-leading-wildcard'
+;; then makes that style match inside a word in Emacs 31 instead of only at
+;; its start, which is the rest of the behaviour above.
+(use-package orderless
+  :ensure t
+  :init
+  (setq completion-styles '(orderless basic)
+        completion-category-overrides '((file (styles partial-completion)))
+        completion-pcm-leading-wildcard t))
 
 ;; Posframe -- the child frames the two popups below are drawn in.  Nothing is
 ;; tuned here: it is declared so that it stays installed on its own account.
