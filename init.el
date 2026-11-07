@@ -423,7 +423,13 @@ enabled, and the older one's faces show through where the newer has none."
   :bind (("C-c t" . my-toggle-theme))
   :config
   ;; Its extras restyle other packages in palette terms; treemacs is loaded
-  ;; later in this file, so wait for it.
+  ;; later in this file, so wait for it.  The tree's labels are remapped to
+  ;; the `variable-pitch' face by default, which here is "Sans Serif": the
+  ;; tree would be the one buffer drawn in a proportional font, out of step
+  ;; with the windows beside it.  `doom-themes-treemacs-config' reads this
+  ;; switch when it remaps the faces, and again after every `load-theme'
+  ;; through an advice, so it has to be set before that call.
+  (setq doom-themes-treemacs-enable-variable-pitch nil)
   (with-eval-after-load 'treemacs
     (doom-themes-treemacs-config)))
 
