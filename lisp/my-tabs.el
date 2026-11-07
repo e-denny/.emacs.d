@@ -209,6 +209,19 @@ project itself, not the tab this one was split off from."
       ;; recomputed from whatever buffer it happens to be showing.
       (tab-bar-rename-tab name))))
 
+(defun my-tab-bar-visit-project ()
+  "Make or select the tab of the project being switched to.
+This is the command `project-switch-project' runs for `C-x p p': that
+command has already read a project, remembered it, and left it in
+`project-current-directory-override', so all that is left is the tab bar's
+own answer, which is also what the chips do -- select the project's tab,
+creating it the first time.  Set as a single symbol in
+`project-switch-commands' it replaces the dispatch menu, and with it the
+second prompt that used to ask what to do inside a project that already
+has a tab."
+  (interactive)
+  (my-tab-bar-select-project (project-root (project-current t))))
+
 (defun my-tab-bar-format-projects ()
   "Produce one clickable chip per known project, dressed as a pill.
 Chip keys are `project-N' rather than `tab-N', which keeps

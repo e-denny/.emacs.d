@@ -333,11 +333,12 @@ is the frame's width less the popup's own, both in pixels."
   (setq project-list-file (expand-file-name "projects" user-emacs-directory)
         project-vc-extra-root-markers '(".project" ".projectile"
                                         "compile_commands.json" "pyproject.toml")
-        ;; What `C-x p p' offers; consult replaces `switch-to-buffer' here.
-        project-switch-commands '((project-find-file "Find file")
-                                  (consult-project-buffer "Buffer")
-                                  (project-find-regexp "Find regexp")
-                                  (project-dired "Dired")))
+        ;; `C-x p p' reads a project and then asks which command to run in
+        ;; it.  Here the answer is always the same, because every project has
+        ;; a tab: a single command symbol means no dispatch menu, so the tab
+        ;; is selected -- or made -- at once, exactly as a chip in the tab bar
+        ;; does, and `C-x p f/b/g/d' still act inside the project afterwards.
+        project-switch-commands 'my-tab-bar-visit-project)
   :bind (:map project-prefix-map
               ("m" . magit-project-status)))
 
