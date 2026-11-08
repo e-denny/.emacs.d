@@ -586,6 +586,10 @@ enabled, and the older one's faces show through where the newer has none."
 ;; pi-sidecar -- the status/model/path panel for pi terminals.  Loaded here,
 ;; after ghostel's own configuration, because it requires ghostel.
 (require 'pi-sidecar)
+;; Visiting an agent switches the frame to the agent's project first, so the
+;; tab bar's chip and the tab line follow the terminal instead of the
+;; terminal opening inside whichever project the frame was showing.
+(setq pi-sidecar-switch-project-function #'my-tab-bar-select-project)
 (global-set-key (kbd "C-c P") #'pi-sidecar-toggle)
 
 ;; ----------------------------------------------------------------------

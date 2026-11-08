@@ -54,6 +54,7 @@
 ;; Setup, in init.el, next to the other companion packages:
 ;;
 ;;   (require 'pi-sidecar)
+;;   (setq pi-sidecar-switch-project-function #'my-tab-bar-select-project)
 ;;   (global-set-key (kbd "C-c P") #'pi-sidecar-toggle)
 ;;
 ;; `pi-sidecar-toggle' opens the sidecar and refreshes it; with it open,
@@ -68,6 +69,7 @@
 
 (require 'cl-lib)
 (require 'json)
+(require 'project)
 (require 'seq)
 (require 'subr-x)
 
@@ -116,6 +118,20 @@ same side area and share that width."
 running, finished, then idle."
   :type '(choice (const :tag "By project" project)
                  (const :tag "By status" status))
+  :group 'pi-sidecar)
+
+(defcustom pi-sidecar-switch-project-function nil
+  "Function called with a project root before an agent's terminal is shown.
+It is how the rest of the frame follows the agent.  Set it to
+my-tab-bar-select-project (see my-tabs.el) and visiting an agent moves
+the tab bar's chip -- and with it the tab line -- to the project the
+agent runs in, instead of leaving the frame on whichever project it
+happened to be showing.  The argument is the root directory
+`project-current' finds for the agent's working directory; an agent
+outside any project leaves the frame where it is.  When nil, visiting
+an agent only shows its buffer."
+  :type '(choice (const :tag "Do not switch projects" nil)
+                 (function :tag "Function"))
   :group 'pi-sidecar)
 
 (defcustom pi-sidecar-status-labels
@@ -871,30 +887,61 @@ run the whole width of the window."
   (interactive)
   (pi-sidecar--move -1))
 
+(defun pi-sidecar--entry-at-key (key)
+  "Return the agent entry for buffer KEY, or nil."
+  (seq-find (lambda (entry) (eq (plist-get entry :buffer) key))
+            pi-sidecar--entries))
+
+(defun pi-sidecar--entry-root (entry)
+  "Return the project root of the directory ENTRY's agent runs in, or nil.
+The directory comes from the agent's process, not from the buffer it
+runs in: `default-directory' follows the shell, which may have been in
+another project when the terminal was opened."
+  (when-let* ((directory (or (plist-get entry :cwd)
+                             (when (buffer-live-p (plist-get entry :buffer))
+                               (with-current-buffer (plist-get entry :buffer)
+                                 default-directory)))))
+    (ignore-errors (project-root (project-current nil directory)))))
+
+(defun pi-sidecar--show-buffer (buffer)
+  "Show BUFFER in a window of this frame and select it.
+A window already displaying BUFFER -- one restored together with the
+agent's project tab, say -- is selected rather than replaced."
+  (let ((window (get-buffer-window buffer 'visible)))
+    (if (and window (not (window-parameter window 'window-side)))
+        (progn
+          (select-frame-set-input-focus (window-frame window))
+          (select-window window))
+      (pop-to-buffer buffer '((display-buffer-reuse-window)
+                              (reusable-frames . visible))))))
+
 (defun pi-sidecar-visit ()
-  "Visit the ghostel buffer of the pi agent at point."
+  "Visit the ghostel buffer of the pi agent at point.
+With `pi-sidecar-switch-project-function' set, the frame first moves to
+the project the agent works in, so the tab bar's chip and the tab line
+describe that project rather than the one the frame was showing."
   (interactive)
   (let ((key (pi-sidecar--key-at-point)))
     (unless (buffer-live-p key)
       (user-error "No pi agent at point"))
-    (let ((window (get-buffer-window key 'visible)))
-      (cond
-       ((and window (not (window-parameter window 'window-side)))
-        (select-frame-set-input-focus (window-frame window))
-        (select-window window))
-       (t
-        (pop-to-buffer key '((display-buffer-reuse-window)
-                             (reusable-frames . visible))))))
+    (when (functionp pi-sidecar-switch-project-function)
+      (when-let* ((root (pi-sidecar--entry-root
+                         (pi-sidecar--entry-at-key key))))
+        (funcall pi-sidecar-switch-project-function root)))
+    (pi-sidecar--show-buffer key)
     (message "pi: %s" (buffer-name key))))
 
 (defun pi-sidecar-visit-mouse (event)
-  "Visit the pi agent clicked in EVENT."
+  "Visit the pi agent clicked in EVENT.
+Point is set in EVENT's buffer without selecting its window: visiting
+selects the agent's window, and a `with-selected-window' around the
+call would put the sidecar back in front as it unwound."
   (interactive "e")
   (let* ((position (event-start event))
          (window (posn-window position))
          (point (posn-point position)))
     (when (and (windowp window) (integer-or-marker-p point))
-      (with-selected-window window
+      (with-current-buffer (window-buffer window)
         (goto-char point)
         (pi-sidecar-visit)))))
 
