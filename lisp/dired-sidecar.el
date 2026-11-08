@@ -128,6 +128,15 @@ This is the new-buffer path of `dired-internal-noselect' spelled out:
 Dired only reads a directory in whole when its name ends in a slash, and
 `dired-mode' alone does not read it at all."
   (setq default-directory (file-name-as-directory directory))
+  ;; `dired-mode' runs `dired-mode-hook' before anything is read, and it does
+  ;; so with `dired-subdir-alist' nil while the buffer still holds whatever
+  ;; listing it had.  A hint that walks that listing then -- `nerd-icons-dired'
+  ;; asks `dired-get-filename' for each line -- fails on the missing alist and
+  ;; takes the read-in down with it, leaving the buffer half set up.  That is
+  ;; the state a session restores the sidecar in, so the old listing goes
+  ;; first; Dired erases the buffer itself, so nothing is lost by it.
+  (let ((inhibit-read-only t))
+    (erase-buffer))
   (dired-mode (file-name-as-directory directory)
               (connection-local-value dired-listing-switches))
   (dired-readin))
