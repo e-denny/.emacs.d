@@ -64,11 +64,14 @@
 ;; Emacs server + pi's Emacs integration
 ;;
 ;; pi reaches this Emacs instance through emacsclient, so the server must be
-;; up.  Both companion packages live in ~/.emacs.d/lisp (already on
+;; up.  The companion packages live in ~/.emacs.d/lisp (already on
 ;; `load-path' above):
 ;;
 ;;   pi-subagents.el  live views of subagent runs, in a term buffer
 ;;   pi-annotate.el   /annotate: mark up a file beside its review sidecar
+;;   pi-sidecar.el    status/model/path sidecar for pi terminals, below treemacs
+;;
+;; `C-c P' toggles the sidecar; inside it, RET visits the pi terminal.
 
 (require 'server)
 (unless (server-running-p)
@@ -579,6 +582,11 @@ enabled, and the older one's faces show through where the newer has none."
   ;; saved terminals were skipped in silence -- no error, no warning.
   :demand t
   :config (ghostel-restore-mode 1))
+
+;; pi-sidecar -- the status/model/path panel for pi terminals.  Loaded here,
+;; after ghostel's own configuration, because it requires ghostel.
+(require 'pi-sidecar)
+(global-set-key (kbd "C-c P") #'pi-sidecar-toggle)
 
 ;; ----------------------------------------------------------------------
 ;; quitting: no questions
