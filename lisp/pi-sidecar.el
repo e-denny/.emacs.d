@@ -73,6 +73,11 @@
 
 (require 'ghostel)
 
+;; Optional: the mode line at the bottom of the sidecar is drawn by
+;; doom-modeline, the same way treemacs gets its own.  When that package
+;; is missing the sidecar simply has no mode line.
+(require 'doom-modeline nil t)
+
 (defgroup pi-sidecar nil
   "Status sidecar for pi agents running in ghostel terminals."
   :group 'tools
@@ -240,6 +245,15 @@ honors them."
   "Face for the empty-state line."
   :group 'pi-sidecar)
 
+(defface pi-sidecar-separator
+  '((((background dark)) :foreground "#5b6268" :underline t)
+    (((background light)) :foreground "#c4c4c4" :underline t)
+    (t :inherit shadow :underline t))
+  "Face for the rule drawn between two agent rows.
+The rule is the underline of a line of spaces, so it is as wide as the
+window and costs no glyph of its own."
+  :group 'pi-sidecar)
+
 ;;;; State
 
 (defvar pi-sidecar--timer nil
@@ -256,6 +270,45 @@ honors them."
 
 (defvar-local pi-sidecar--selection-overlay nil
   "Overlay marking the agent row at point.")
+
+;;;; Mode line
+;;
+;; Treemacs gets a strip of its own at the bottom of its window, drawn by
+;; doom-modeline.  The sidecar gets the same treatment: a modeline of its
+;; own with the bar at its start and the active/inactive faces that
+;; doom-modeline picks for the window the strip belongs to, so selecting
+;; the sidecar lights it up and selecting another window dims it.
+
+(defun pi-sidecar--agent-count ()
+  "Return a summary of the agents currently listed."
+  (let* ((entries pi-sidecar--entries)
+         (total (length entries))
+         (busy (seq-count (lambda (entry)
+                            (memq (plist-get entry :status)
+                                  '(running blocked)))
+                          entries)))
+    (cond ((zerop total) "no agents")
+          ((zerop busy) (format "%d agent%s"
+                                total (if (= total 1) "" "s")))
+          (t (format "%d/%d busy" busy total)))))
+
+(when (fboundp 'doom-modeline-def-modeline)
+  (doom-modeline-def-segment pi-sidecar-agents
+    "Number of agents listed in the sidecar."
+    (concat (propertize (pi-sidecar--agent-count)
+                        'face (doom-modeline-face
+                               'doom-modeline-buffer-minor-mode))
+            (doom-modeline-spc)))
+  ;; The bar and the mode name on the left, the count on the right --
+  ;; treemacs' strip minus the workspace name.
+  (doom-modeline-def-modeline 'pi-sidecar
+    '(bar " " major-mode)
+    '(pi-sidecar-agents)))
+
+(defun pi-sidecar--setup-mode-line ()
+  "Use the sidecar's own doom-modeline strip in the current buffer."
+  (when (fboundp 'doom-modeline-format--pi-sidecar)
+    (doom-modeline-set-modeline 'pi-sidecar)))
 
 ;;;; Process and session inspection
 ;;
@@ -755,6 +808,15 @@ keeps the end of that component instead."
     (add-text-properties start (1- (point))
                          (list 'mouse-face 'pi-sidecar-mouse))))
 
+(defun pi-sidecar--insert-separator (width)
+  "Insert a horizontal rule WIDTH columns wide.
+The rule is the underline of a row of spaces in the
+pi-sidecar-separator face, which keeps it free of glyphs and lets it
+run the whole width of the window."
+  (insert (propertize (make-string (max 1 width) ?\s)
+                      'face 'pi-sidecar-separator))
+  (insert "\n"))
+
 (defun pi-sidecar--insert-empty ()
   "Insert the placeholder shown when no pi is running."
   (insert "  ")
@@ -897,9 +959,13 @@ the cursor replacement for moving between rows, not an inactive marker."
         (inhibit-read-only t))
     (setq pi-sidecar--entries (pi-sidecar--collect))
     (erase-buffer)
-    (let ((width (pi-sidecar--render-width)))
+    (let ((width (pi-sidecar--render-width))
+          (first t))
       (if pi-sidecar--entries
           (dolist (entry pi-sidecar--entries)
+            (unless first
+              (pi-sidecar--insert-separator width))
+            (setq first nil)
             (pi-sidecar--insert-entry entry width))
         (pi-sidecar--insert-empty)))
     (if key
@@ -1038,19 +1104,25 @@ the cursor replacement for moving between rows, not an inactive marker."
 
 The sidecar lists every pi process running in a ghostel terminal of
 this Emacs.  Each row shows the status dot and model on the first line,
-the status word right-aligned, and the working directory below it.  The
-buffer has no mode line, tab line or cursor; the highlighted row marks
-point instead.
+the status word right-aligned, and the working directory below it, with
+a horizontal rule between two agents.  The buffer has no tab line or
+cursor; the highlighted row marks point instead, and the mode line at
+the bottom of the window belongs to the sidecar alone.
 
 \\{pi-sidecar-mode-map}"
   (setq-local truncate-lines t)
   (setq-local word-wrap nil)
-  (setq-local mode-line-format nil)
   (setq-local header-line-format nil)
   ;; The sidecar is a status panel, not an editing buffer: no tab line, no
-  ;; cursor (the selected-row overlay shows where point is).
+  ;; cursor (the selected-row overlay shows where point is).  Turning the
+  ;; mode off here is not enough -- global-tab-line-mode turns it on for
+  ;; every new buffer from after-change-major-mode-hook, which runs after
+  ;; this function -- so the buffer also excludes itself, which is what
+  ;; the globalised mode consults.
+  (setq-local tab-line-exclude t)
   (setq-local tab-line-format nil)
   (tab-line-mode -1)
+  (pi-sidecar--setup-mode-line)
   (setq-local cursor-type nil)
   (setq-local cursor-in-non-selected-windows nil)
   (setq-local revert-buffer-function #'pi-sidecar--revert)
