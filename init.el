@@ -586,9 +586,10 @@ enabled, and the older one's faces show through where the newer has none."
 
 ;; dired-sidecar -- the workspace's directory listing in the left column,
 ;; above the pi sidecar.  Every tab shows the listing of its own project root,
-;; and TAB turns a directory into a subtree (dired-subtree, configured under
-;; "dired" above).  Loaded after pi-sidecar, so that when the listing is the
-;; one that creates the left column it asks for the pi sidecar's width.
+;; each entry carries a bar with its state in the repository, and TAB turns a
+;; directory into a subtree (dired-subtree, configured under "dired" above).
+;; Loaded after pi-sidecar, so that when the listing is the one that creates
+;; the left column it asks for the pi sidecar's width.
 (require 'dired-sidecar)
 (global-set-key (kbd "C-c T") #'dired-sidecar-toggle)
 

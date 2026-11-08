@@ -20,12 +20,23 @@
 ;; The listing is an ordinary Dired buffer, so every Dired command works in
 ;; it: RET and the mouse open a file in the main window and leave the listing
 ;; where it is, `m' marks, `C' copies, `g' reads the directory again, and `q'
-;; hides the sidecar in every tab -- `C-c T' brings it back.  What makes it a tree is `dired-subtree' (bound to TAB
-;; over all Dired buffers in init.el): TAB on a directory inserts the
-;; directory's own listing indented below its line, TAB again takes it away,
-;; and `dired-subtree-cycle' opens a level per TAB.  That is what the tree is
-;; here -- no package of its own, no separate keymap, no second idea of a
-;; workspace to keep in step with `project.el'.
+;; hides the sidecar in every tab (`C-c T' brings it back).  What makes it a
+;; tree is `dired-subtree', bound to TAB over all Dired buffers in init.el:
+;; TAB on a directory inserts the directory's own listing indented below its
+;; line, TAB again takes it away, and `dired-subtree-cycle' opens a level per
+;; TAB.  That is what the tree is here -- no package of its own, no separate
+;; keymap, no second idea of a workspace to keep in step with `project.el'.
+;;
+;; Each entry also carries the state it has in the repository the listing
+;; belongs to: a bar in front of the line, drawn the way the tab bar draws the
+;; bar in front of a chip -- a space stretched to a few pixels and painted in
+;; the state's colour -- green for a new file, yellow for a modified one, red
+;; for a deleted one or for a conflict, purple for a rename.  A directory
+;; takes the strongest state of anything below it, so a closed directory
+;; still says that something in it changed.  A bar and not a colour on the
+;; name, because Dired already speaks through its text: marks, the `D' flag
+;; and the highlight are all name-level colouring, and a second meaning laid
+;; over them would be read against them.
 ;;
 ;; One buffer per project root, not one per tab: a listing belongs to a
 ;; directory, so two tabs of the same project share one listing, with the
@@ -37,7 +48,7 @@
 ;; package knows which window to fill and which listings are none of its
 ;; business.
 ;;
-;; Following the workspace is the tab bar's own job: `--show' runs from
+;; Following the workspace is the tab bar's own job: `--follow-tab' runs from
 ;; `tab-bar-tab-post-select-functions' and `-post-open-functions', draws the
 ;; listing of whichever project the tab has landed in, and replaces the
 ;; buffer of whatever sidecar window the tab restored.  A tab made by
@@ -141,7 +152,14 @@ the tree itself."
     ;; `quit-window' would bury the listing and have it come back on the next
     ;; tab switch; hiding it puts it away everywhere instead, as `C-c T' does.
     (define-key map (kbd "q") #'dired-sidecar-toggle)
-    (use-local-map map)))
+    (use-local-map map))
+  ;; The repository's state is read again whenever Dired re-reads the
+  ;; directory, and whenever a subtree opens or closes -- both of which erase
+  ;; or insert the text the bars were attached to.
+  (add-hook 'dired-after-readin-hook #'dired-sidecar--git-annotate nil t)
+  (add-hook 'dired-subtree-after-insert-hook #'dired-sidecar--git-annotate nil t)
+  (add-hook 'dired-subtree-after-remove-hook #'dired-sidecar--git-annotate nil t)
+  (dired-sidecar--git-annotate))
 
 (defun dired-sidecar--buffer (root)
   "Return the sidecar listing of project ROOT, making it if needed."
@@ -156,6 +174,265 @@ the tree itself."
         (dired-sidecar--setup-buffer)
         (setq-local dired-sidecar--ready t)))
     buffer))
+
+;;;; git state
+
+;; The states come from `git status --porcelain', read with `-z' so that a
+;; name with a newline in it cannot break the parse, and with
+;; `--untracked-files=all', which lists every file of an untracked directory:
+;; the listing is a browser, so a directory that opens to show a tree of new
+;; files should mark them all, and the directory itself still gets one bar
+;; from the walk up.  Paths are matched as absolute names without their
+;; trailing slash, the form Dired hands out for a line and the form the
+;; sidecar buffer keys its entries by.
+;;
+;; The repository is found from the listing's own directory, so a listing
+;; that has been walked up above the project still finds the same repository,
+;; and a directory that belongs to none simply shows no bars.  A bar's colour
+;; is the state's face foreground, the way the tab bar takes its chip's accent
+;; from the theme: the faces are inherited from `success', `warning', `error'
+;; and `font-lock-constant-face', so `C-c t' flips them along with everything
+;; else.
+
+(defcustom dired-sidecar-git-marks t
+  "Whether entries show the state they have in the repository.
+The state is a bar in front of the entry: green for a file that is new to
+the repository, yellow for one that changed, red for one that was deleted
+or that is in conflict, and purple for one that was renamed.  A directory
+shows the strongest state of anything below it, and an entry with no state
+still gets the bar's column, empty, so that the names line up.
+
+Nothing runs while no listing is on screen.  `git status' is read when a
+listing is first made, when Dired reads the directory again, when a
+subtree opens or closes, when a tab is selected, and otherwise no more
+often than `dired-sidecar-git-refresh-interval' seconds of idleness."
+  :type 'boolean
+  :group 'dired-sidecar)
+
+(defcustom dired-sidecar-git-bar-width nil
+  "Width in pixels of the bar in front of an entry.
+Nil means `doom-modeline-bar-width', the mode line's own bar, so the two
+match, and four pixels otherwise."
+  :type '(choice (const :tag "Match the mode line" nil)
+                 (integer :tag "Pixels"))
+  :group 'dired-sidecar)
+
+(defcustom dired-sidecar-git-refresh-interval 5
+  "Seconds of idleness between git checks of the listings on screen.
+Nil leaves the check to `revert-buffer', to a subtree being opened or
+closed, and to a tab being selected."
+  :type '(choice (const :tag "Off" nil)
+                 (number :tag "Seconds"))
+  :group 'dired-sidecar)
+
+(defface dired-sidecar-git-new
+  '((t :inherit success))
+  "Bar in front of an entry that is new to the repository."
+  :group 'dired-sidecar)
+
+(defface dired-sidecar-git-modified
+  '((t :inherit warning))
+  "Bar in front of an entry that changed since the last commit."
+  :group 'dired-sidecar)
+
+(defface dired-sidecar-git-deleted
+  '((t :inherit error))
+  "Bar in front of an entry whose file is gone from the working tree."
+  :group 'dired-sidecar)
+
+(defface dired-sidecar-git-conflict
+  '((t :inherit error))
+  "Bar in front of an entry that is unmerged."
+  :group 'dired-sidecar)
+
+(defface dired-sidecar-git-renamed
+  '((t :inherit font-lock-constant-face))
+  "Bar in front of an entry that was renamed."
+  :group 'dired-sidecar)
+
+(defconst dired-sidecar--git-faces
+  '((new . dired-sidecar-git-new)
+    (modified . dired-sidecar-git-modified)
+    (deleted . dired-sidecar-git-deleted)
+    (conflict . dired-sidecar-git-conflict)
+    (renamed . dired-sidecar-git-renamed))
+  "Face drawing the bar for each git state.")
+
+(defconst dired-sidecar--git-order
+  '((conflict . 5) (deleted . 4) (modified . 3) (renamed . 2) (new . 1))
+  "How loud each state is, for a directory holding several of them.")
+
+(defvar dired-sidecar--git-timer nil
+  "Idle timer that re-checks the states of the listings on screen.")
+
+(defun dired-sidecar--git-strength (state)
+  "How loud STATE is, as a number; 0 when there is no state."
+  (or (alist-get state dired-sidecar--git-order) 0))
+
+(defun dired-sidecar--git-root (directory)
+  "Return the repository root above DIRECTORY, or nil."
+  (when-let* ((root (ignore-errors (locate-dominating-file directory ".git"))))
+    (directory-file-name (expand-file-name root))))
+
+(defun dired-sidecar--git-category (xy)
+  "Return the state named by XY, the two letters of a git status entry."
+  (cond
+   ((equal xy "??") 'new)
+   ((string-match-p "U" xy) 'conflict)
+   ((member xy '("AA" "DD")) 'conflict)
+   ((string-match-p "[RC]" xy) 'renamed)
+   ((string-match-p "D" xy) 'deleted)
+   ((string-match-p "[MT]" xy) 'modified)
+   ((string-match-p "A" xy) 'new)))
+
+(defun dired-sidecar--git-mark (states root path xy)
+  "Record XY, the state of PATH, for PATH and every directory above it.
+The walk up stops at ROOT.  A directory keeps the strongest state of the
+things below it, which is what `dired-sidecar--git-order' decides."
+  (let ((state (dired-sidecar--git-category xy))
+        (root (directory-file-name (expand-file-name root)))
+        (prefix (file-name-as-directory
+                 (directory-file-name (expand-file-name root))))
+        (entry (directory-file-name (expand-file-name path root))))
+    (while (and state entry
+                (or (equal entry root)
+                    (string-prefix-p prefix (file-name-as-directory entry))))
+      (when (> (dired-sidecar--git-strength state)
+               (dired-sidecar--git-strength (gethash entry states)))
+        (puthash entry state states))
+      (setq entry (unless (equal entry root)
+                    (directory-file-name (file-name-directory entry)))))))
+
+(defun dired-sidecar--git-read (root output)
+  "Return the states in OUTPUT, a `git status' listing from ROOT."
+  (let ((states (make-hash-table :test #'equal))
+        (records (split-string output "\0" t)))
+    (while records
+      (let* ((record (pop records))
+             (xy (substring record 0 2))
+             (path (substring record 3)))
+        ;; A rename or a copy names the path it came from in the record
+        ;; that follows.
+        (when (memq (aref xy 0) '(?R ?C))
+          (pop records))
+        (dired-sidecar--git-mark states root path xy)))
+    states))
+
+(defun dired-sidecar--git-statuses (directory)
+  "Return a hash of path to git state for the changes below DIRECTORY.
+Directories are included, carrying the strongest state of anything below
+them.  Nil when DIRECTORY is in no repository, or when git cannot be
+asked."
+  (when-let* ((root (dired-sidecar--git-root directory)))
+    (with-temp-buffer
+      (let ((default-directory (file-name-as-directory root))
+            ;; Reading the state should not take the index lock away from a
+            ;; commit running in another window.
+            (process-environment (cons "GIT_OPTIONAL_LOCKS=0" process-environment)))
+        (when (and (ignore-errors
+                     (eq 0 (call-process "git" nil t nil
+                                         "status" "--porcelain=v1" "-z"
+                                         "--untracked-files=all")))
+                   (> (point-max) (point-min)))
+          (dired-sidecar--git-read root (buffer-string)))))))
+
+(defun dired-sidecar--git-state-at-point (states)
+  "Return the git state of the file on this line, or nil.
+STATES is the hash `dired-sidecar--git-statuses' returned."
+  (save-excursion
+    (when (dired-move-to-filename nil)
+      (let* ((directory (dired-current-directory))
+             (start (point))
+             (end (next-single-property-change start 'dired-filename nil
+                                               (line-end-position)))
+             (name (buffer-substring-no-properties start end)))
+        ;; A line the subdir alist does not know about -- one whose directory
+        ;; has just been removed, say -- has no path to look up.
+        (when (and (stringp directory) (not (member name '("." ".."))))
+          (gethash (directory-file-name (expand-file-name name directory))
+                   states))))))
+
+(defun dired-sidecar--git-bar-width ()
+  "Width in pixels of the bar in front of an entry."
+  (or dired-sidecar-git-bar-width
+      (let ((width (bound-and-true-p doom-modeline-bar-width)))
+        (and (integerp width) width))
+      4))
+
+(defun dired-sidecar--git-bar (state)
+  "Return the bar marking STATE, to be shown in front of a line.
+With no STATE the bar is the empty share of the same column, so that an
+entry without a state still lines up with the ones that have one.  The bar
+itself is a space stretched to a few pixels and painted in the state's
+colour, the way the tab bar and the mode line draw their own bars."
+  (let ((color (and state
+                    (face-attribute (alist-get state dired-sidecar--git-faces)
+                                    :foreground nil t))))
+    (unless (stringp color)
+      (setq color (and state (face-attribute 'default :foreground nil t))))
+    (propertize " "
+                'display (list 'space :width
+                               (list (dired-sidecar--git-bar-width)))
+                'face (and (stringp color) (list :background color)))))
+
+(defun dired-sidecar--git-annotate-line (states)
+  "Put this line's bar in place, or take it away.
+STATES is the hash `dired-sidecar--git-statuses' returned, or nil when
+there is nothing to mark.  A line that is an entry gets the bar or, with
+no state to show, its empty share of the column, so that the names of a
+listing stay in one column; a subdirectory's header line gets neither."
+  (let ((bol (line-beginning-position)))
+    (when (save-excursion (dired-move-to-filename nil))
+      (let ((state (and states (dired-sidecar--git-state-at-point states))))
+        (cond
+         (state
+          (put-text-property bol (1+ bol) 'before-string
+                             (dired-sidecar--git-bar state))
+          (put-text-property bol (1+ bol) 'dired-sidecar-git state))
+         (dired-sidecar-git-marks
+          (put-text-property bol (1+ bol) 'before-string
+                             (dired-sidecar--git-bar nil))
+          (remove-text-properties bol (1+ bol) '(dired-sidecar-git nil)))
+         (t
+          (remove-text-properties bol (1+ bol)
+                                  '(before-string nil dired-sidecar-git nil))))))))
+
+(defun dired-sidecar--git-annotate ()
+  "Mark every entry of this listing with its state in the repository.
+With `dired-sidecar-git-marks' off, the walk still runs, so that the bars
+already drawn are taken away again."
+  (when (derived-mode-p 'dired-mode)
+    (let ((states (and dired-sidecar-git-marks
+                       (dired-sidecar--git-statuses
+                        (or (and (consp dired-directory)
+                                 (car dired-directory))
+                            dired-directory
+                            default-directory))))
+          (inhibit-read-only t))
+      (save-excursion
+        (goto-char (point-min))
+        (while (not (eobp))
+          (dired-sidecar--git-annotate-line states)
+          (forward-line 1))))))
+
+(defun dired-sidecar--git-refresh ()
+  "Re-check the states of every sidecar listing that is on screen."
+  (dolist (window (window-list nil 'nomini))
+    (with-current-buffer (window-buffer window)
+      (when (and dired-sidecar-root (derived-mode-p 'dired-mode))
+        (dired-sidecar--git-annotate)))))
+
+(when dired-sidecar-git-refresh-interval
+  (setq dired-sidecar--git-timer
+        (run-with-idle-timer dired-sidecar-git-refresh-interval
+                             dired-sidecar-git-refresh-interval
+                             #'dired-sidecar--git-refresh)))
+
+;; The bars take their colour from faces that inherit from the theme, but a
+;; bar already drawn keeps the colour it was given, so a theme change has to
+;; read the state again -- `C-c t' should recolor the bars as it recolors
+;; everything else.
+(add-hook 'enable-theme-functions #'dired-sidecar--git-refresh)
 
 ;;;; Display
 
@@ -266,7 +543,10 @@ along."
           (set-window-dedicated-p window nil))
         (set-window-buffer window buffer)
         (set-window-dedicated-p window buffer))
-       (t (dired-sidecar--display buffer))))))
+       (t (dired-sidecar--display buffer))))
+    ;; The listing that is now on screen may have been read before the
+    ;; repository moved on, so its bars are re-checked here.
+    (dired-sidecar--git-refresh)))
 
 (defvar dired-sidecar--hidden nil
   "Non-nil when the listing was closed on purpose.
