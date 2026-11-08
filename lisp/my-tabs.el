@@ -414,6 +414,63 @@ Tabs outside a project (*scratch*, say) keep whatever group they had."
 (tab-bar-mode 1)
 
 ;; ----------------------------------------------------------------------
+;; a root window is never a side window
+;; ----------------------------------------------------------------------
+
+;; Selecting a tab restores its layout with `window-state-put', whose last
+;; step puts the saved window parameters back -- on the frame's root window
+;; as well.  A tab that held one side window and nothing else (a lone pi
+;; sidecar, or treemacs on its own) therefore leaves the root window marked
+;; `window-side' left.  That mark is a trap: `split-window' on the root
+;; redirects to `window-main-window' whenever the frame "has a side window"
+;; (Bug#73627), and `window-main-window' hands the root straight back, since
+;; the root is the side window it finds.  So the next tab whose layout has
+;; to be split recurses until `max-lisp-eval-depth' blows, and every chip in
+;; the bar answers "Lisp nesting exceeds ..." instead of switching.  Clean
+;; the root right around the restore that marks it, and once after a session
+;; is loaded; side windows below the root keep their parameters.
+
+(defun my-tabs--unsided-root (&rest _)
+  "Drop `window-side' and `window-slot' from every frame's root window.
+A root window is never a side window, but a restored window state can
+mark it as one; see the comment above.  Only the root is cleaned, so a
+treemacs or sidecar window further down the tree keeps its parameters."
+  (dolist (frame (frame-list))
+    (let ((root (frame-root-window frame)))
+      (when (windowp root)
+        (dolist (parameter '(window-side window-slot))
+          (when (window-parameter root parameter)
+            (set-window-parameter root parameter nil)))))))
+
+(defun my-tabs--state-put-unsided (function &rest args)
+  "Call FUNCTION with ARGS, keeping restored roots out of the side.
+FUNCTION is `window-state-put': it is the one that puts a saved
+`window-side' back, so the clean-up runs both before it -- stripping a
+root left marked by an earlier restore, which is what keeps the splits
+it does from recursing -- and after it, since a state can mark the root
+again on the way out."
+  (my-tabs--unsided-root)
+  (prog1 (apply function args)
+    (my-tabs--unsided-root)))
+
+(advice-add 'window-state-put :around #'my-tabs--state-put-unsided)
+
+;; A session brings its tabs back with the marks they were saved with, and
+;; `easysession' restores at depth 102, so the sweep runs after it.
+(add-hook 'emacs-startup-hook #'my-tabs--unsided-root 110)
+(with-eval-after-load 'easysession
+  (add-hook 'easysession-after-load-hook #'my-tabs--unsided-root))
+
+;; A side window can end up the only window on the frame -- delete the
+;; window beside treemacs and treemacs keeps the `window-side' it was given
+;; -- and that happens on a configuration change; the sweep runs then too.
+;; Clearing a parameter does not change the configuration, so it does not
+;; re-run itself.
+(add-hook 'window-configuration-change-hook #'my-tabs--unsided-root)
+
+(my-tabs--unsided-root)
+
+;; ----------------------------------------------------------------------
 ;; tab line: the current project's buffers
 ;; ----------------------------------------------------------------------
 
