@@ -55,12 +55,17 @@
 ;;
 ;; The blog hard-codes a light gray strip with a purple `#b34cb3' selected
 ;; tab.  Here the bars take their colors from the active theme instead, so
-;; `C-c t' keeps flipping dark and light.  Under `doom-one' that means an
-;; inactive chip is the same color as the bar and blends into it -- there is
-;; no edge glyph to draw, and a space keeps the names apart -- while the
-;; selected chip is the editor background, dark against the bar, and gets
-;; the rounded edges.  Set `my-tabs-edge-style' to `slanted' for powerline
-;; triangles instead of half circles, or to `flat' for plain rectangles.
+;; `C-c t' keeps flipping dark and light.  Both bars mark every chip with a
+;; vertical bar at its left edge: blue in the theme's accent color for the
+;; selected chip, grey for the others.  The selected chip's background is
+;; pulled toward that blue (`my-tabs-active-tint'), because the theme's own
+;; selected background sits too close to the bar's to be told apart; its
+;; left edge is straight, so the blue bar runs unbroken from the chip's top
+;; to its bottom, while its right edge keeps the rounded cap.  An inactive
+;; chip keeps the bar's background and carries only the grey bar, so the
+;; names stay apart without a chip-shaped slab per buffer.  Set
+;; `my-tabs-edge-style' to `slanted' for a powerline triangle as the right
+;; cap, or to `flat' for a square one.
 
 ;;; Code:
 
@@ -71,29 +76,70 @@
 (require 'tab-bar)
 (require 'tab-line)
 
+(defun my-tabs--redraw (&rest _)
+  "Rebuild both bars from scratch.
+The tab line caches its formatted strings per window, and a chip's
+background and accent bar are computed while those strings are made, so
+both caches have to go when the theme or `my-tabs-active-tint' changes."
+  (tab-line-force-update t)
+  (force-mode-line-update t))
+
 ;; ----------------------------------------------------------------------
 ;; edges
 ;; ----------------------------------------------------------------------
 
 (defcustom my-tabs-edge-style 'rounded
-  "Shape of the left and right edge of a tab.
+  "Shape of the right edge of a tab.
 `rounded' is a half circle, the closest a glyph gets to the wave
 `powerline-wave-right' draws in the blog post this file follows;
-`slanted' is the powerline triangle; `flat' draws no edge at all."
+`slanted' is the powerline triangle; `flat' draws no cap at all.
+The left edge is always straight: it is where the accent bar that
+`my-tabs--pill' puts in front of a chip meets the chip's background."
   :type '(choice (const :tag "Rounded (half circle)" rounded)
                  (const :tag "Slanted (powerline triangle)" slanted)
                  (const :tag "Flat (no edge glyph)" flat))
   :group 'tab-line
   :version "31.1")
 
-(defconst my-tabs--edges
-  `((rounded . (,(string #xe0b6) . ,(string #xe0b4)))  ; left cap, right cap
-    (slanted . (,(string #xe0b2) . ,(string #xe0b0)))
-    (flat . ("" . "")))
-  "Edge glyphs per `my-tabs-edge-style', as (LEFT . RIGHT).
-Both are the powerline block of the Nerd Font: U+E0B6 fills its right
-half and rounds its left, U+E0B4 fills its left half and rounds its
-right, so they cap a tab whose background they are drawn in.")
+(defcustom my-tabs-active-tint 0.22
+  "How far the selected tab's background is pulled toward the accent.
+The themes leave the selected tab barely lighter than the bar, which is
+hard to see.  Blending its background this far toward the accent color
+makes the chip stand out; 0 keeps the theme's own color, 1 makes it the
+accent color outright.  The blue bar at the chip's left edge is drawn
+in the accent color whether or not the background is tinted."
+  :type 'number
+  :set (lambda (symbol value)
+         (set-default symbol value)
+         (my-tabs--redraw))
+  :group 'tab-line
+  :version "31.1")
+
+(defconst my-tabs--caps
+  `((rounded . ,(string #xe0b4))   ; fills its left half, rounds its right
+    (slanted . ,(string #xe0b0))
+    (flat . ""))
+  "Glyph ending a tab whose background it is drawn in, by style.
+The powerline block of the Nerd Font supplies it: U+E0B4 fills its left
+half and rounds its right, so the tab's color flows into the bar.")
+
+(defconst my-tabs--accent-fallback "#51afef"
+  "Blue used for the selected chip's bar when the theme names none.")
+
+(defun my-tabs--bar-width (selected)
+  "Width in pixels of the bar in front of a chip.
+SELECTED asks for the bar on the chip whose window or project is
+current; it is `doom-modeline-bar-width' when doom-modeline is
+installed, so it is as wide as the one that starts the mode line, and
+four pixels otherwise.  The bars on the other chips are half that, two
+pixels: at the accent's width they read as loudly as the accent itself,
+and they are only there to hold the chips apart."
+  (let ((width (if (and (boundp 'doom-modeline-bar-width)
+                        (integerp doom-modeline-bar-width)
+                        (> doom-modeline-bar-width 0))
+                   doom-modeline-bar-width
+                 4)))
+    (if selected width (max 1 (/ width 2)))))
 
 (defun my-tabs--color (attribute face)
   "Value of ATTRIBUTE in FACE, or nil when it is unspecified.
@@ -114,25 +160,115 @@ reports the background of whichever parent has one."
                   (let ((parents (plist-get face :inherit)))
                     (if (listp parents) parents (list parents))))))))))
 
+(defun my-tabs--first (property string)
+  "First non-nil PROPERTY among the characters of STRING, or nil."
+  (let ((pos 0) value)
+    (while (and (null value) (< pos (length string)))
+      (setq value (get-text-property pos property string))
+      (setq pos (1+ pos)))
+    value))
+
+(defun my-tabs--blend (color other weight)
+  "Move COLOR toward OTHER by WEIGHT, a number between 0 and 1.
+Returns COLOR unchanged when either one is not a color the display
+knows, so a theme that leaves an attribute unspecified still renders."
+  (let ((from (and (stringp color) (color-name-to-rgb color)))
+        (to (and (stringp other) (color-name-to-rgb other))))
+    (if (or (null from) (null to))
+        color
+      (apply #'color-rgb-to-hex
+             (append (cl-mapcar (lambda (a b)
+                                  (+ (* (- 1 weight) a) (* weight b)))
+                                from to)
+                     '(2))))))
+
+(defun my-tabs--accent ()
+  "The theme's accent color, used for the selected chip's bar.
+Themes give `link' the color they use for emphasis, which is a blue in
+the ones this config ships with; fall back to a plain blue when a theme
+leaves it unspecified."
+  (or (my-tabs--color :foreground 'link)
+      (my-tabs--color :foreground 'minibuffer-prompt)
+      my-tabs--accent-fallback))
+
+(defun my-tabs--scale ()
+  "Scale that makes a chip's bar and cap as tall as the mode line.
+The mode line is taller than the frame's font, and both bars are made
+to match it.  The text keeps the font's size, and a face's background
+fills whatever height the row has, so only the two cells whose glyphs
+have to span the row -- the accent bar and the cap -- are scaled.
+The height is read off any window of the frame that has a mode line,
+because a window without one (the pi sidecar, say) reports zero."
+  (let* ((char (frame-char-height))
+         (height (and (fboundp 'window-mode-line-height)
+                      (seq-some (lambda (window)
+                                  (let ((line (window-mode-line-height window)))
+                                    (and line (> line char) line)))
+                                (window-list nil t)))))
+    (if (and char (> char 0) height)
+        (/ (float height) char)
+      1.0)))
+
+(defun my-tabs--accent-face (selected)
+  "Face for the bar in front of a chip.
+SELECTED picks the accent color for the bar and grey for the others.
+The bar is a space as wide as `my-tabs--bar-width' suggests, filled
+with this face's background and scaled by `my-tabs--scale' so its color
+runs from the top of the row to the bottom."
+  (let ((color (if selected
+                   (my-tabs--accent)
+                 (or (my-tabs--color :foreground 'tab-bar-tab-inactive)
+                     (my-tabs--color :foreground 'tab-line-tab-inactive)
+                     "grey50"))))
+    (list :foreground color
+          :background color
+          :height (my-tabs--scale))))
+
 (defun my-tabs--pill (text face bar-face)
-  "Put padded TEXT between the edge glyphs that make a tab a pill.
-TEXT should already carry FACE itself; the padding and the glyphs are
-propertized here.  The glyphs continue FACE's background over the
-background of BAR-FACE, so a tab whose background is the bar's -- an
-inactive chip under `doom-one' -- drops them and is held apart from its
-neighbours by the padding alone."
-  (let* ((pad (propertize " " 'face face))
-         (body (concat pad text pad))
-         (edges (cdr (assq my-tabs-edge-style my-tabs--edges)))
-         (background (my-tabs--color :background face))
-         (bar (my-tabs--color :background bar-face)))
-    (if (or (null edges) (null background) (equal background bar))
-        body
-      (let ((caps (list :foreground background
-                        :background (or bar background))))
-        (concat (propertize (car edges) 'face caps)
-                body
-                (propertize (cdr edges) 'face caps))))))
+  "Put TEXT in a chip: an accent bar, a space, the text, a pad and a cap.
+TEXT should already carry FACE itself; the bar, the space after it, the
+pad and the cap are propertized here.  The bar's cell is drawn in
+BAR-FACE's background so the bar looks like it closes the gap before the
+chip; the chip's own background is FACE's, pulled toward the accent by
+`my-tabs-active-tint' when the theme makes it differ from the bar --
+which is how a selected chip is told apart from an inactive one.  An
+inactive chip, whose background is the bar's, gets only the grey bar and
+the padding, and so runs into the bar the way it always did."
+  (let* ((background (my-tabs--color :background face))
+         (bar (my-tabs--color :background bar-face))
+         (selected (and background bar (not (equal background bar))))
+         (surface (if selected
+                      (my-tabs--blend background (my-tabs--accent)
+                                      my-tabs-active-tint)
+                    background))
+         ;; A space of its own between the bar and the name or the icon.
+         (body (concat (propertize " " 'face face)
+                       text
+                       (propertize " " 'face face)))
+         ;; The bar is a space stretched to a fixed width and painted in
+         ;; its face's background: a block glyph would be a fraction of a
+         ;; character wide, and no fractions wider than an eighth fill
+         ;; from the right.
+         (bar-cell (propertize " "
+                               'display (list 'space :width
+                                              (list (my-tabs--bar-width
+                                                     selected)))
+                               'face (my-tabs--accent-face selected)))
+         (cap (cdr (assq my-tabs-edge-style my-tabs--caps))))
+    (when (and selected (not (equal surface background)))
+      ;; Prepend, because the first face to set an attribute wins and the
+      ;; text already carries FACE, whose background is the theme's.
+      (add-face-text-property 0 (length body)
+                              (list :background surface) nil body))
+    ;; The bar is part of the chip, so hovering it should light up the chip.
+    (when-let* ((mouse (my-tabs--first 'mouse-face text)))
+      (put-text-property 0 1 'mouse-face mouse bar-cell))
+    (concat bar-cell
+            body
+            (when (and selected cap (not (equal cap "")))
+              (propertize cap 'face (list :foreground (or surface background)
+                                          :background (or bar background)
+                                          :height (my-tabs--scale)))))))
 
 ;; ----------------------------------------------------------------------
 ;; tab bar: a project switcher
@@ -349,8 +485,18 @@ front of the name."
 ;; formatter adds the tab's face over the whole button afterwards, so the
 ;; glyph ends up in the tab's own foreground and the space in front of it in
 ;; the tab's background, rather than as a grey image that ignores the theme.
+;; The glyph is drawn at 70% of its usual size: at full size the cross is
+;; as tall as the buffer icon and crowds the name it sits next to.  It is
+;; also raised, because a glyph smaller than the font sits on the same
+;; baseline as the text and so ends up below the middle of a row that is
+;; taller than the text; `nerd-icons-mdicon' turns `:v-adjust' into the
+;; `raise' property, and 0.3 puts the cross in the middle of the row.
+;; The height goes through `nerd-icons-mdicon' rather than a face of its
+;; own, so that the family face that finds the glyph stays on the string;
+;; a second face would replace it and the cross would come out as tofu.
 (setq tab-line-close-button
-      (propertize (concat " " (nerd-icons-mdicon "nf-md-close"))
+      (propertize (concat " " (nerd-icons-mdicon "nf-md-close"
+                                                  :height 0.7 :v-adjust 0.3))
                   'rear-nonsticky nil ; important to not break auto-scroll
                   'keymap tab-line-tab-close-map
                   'mouse-face 'tab-line-close-highlight
@@ -385,14 +531,12 @@ front of the name."
   "Drop the box around both bars and redraw them in the theme's colors.
 Called on load and after every `load-theme', since a theme that draws a
 box around its tabs (or changes their backgrounds) would otherwise leave
-the pills in the previous theme's colors: the tab line caches its
-formatted strings per window, and `tab-line-force-update' clears that."
+the pills in the previous theme's colors."
   (dolist (face '(tab-bar tab-bar-tab tab-bar-tab-inactive
                   tab-line tab-line-tab tab-line-tab-current
                   tab-line-tab-inactive))
     (set-face-attribute face nil :box nil))
-  (tab-line-force-update t)
-  (force-mode-line-update t))
+  (my-tabs--redraw))
 
 (add-hook 'enable-theme-functions #'my-tabs--flatten)
 (add-hook 'disable-theme-functions #'my-tabs--flatten)
