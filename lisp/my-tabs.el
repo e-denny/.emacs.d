@@ -322,8 +322,8 @@ put in place *before* the tab exists, through the bindings `tab-bar' offers
 for exactly that (`tab-bar-new-tab-choice', `tab-bar-tab-name-function',
 `tab-bar-new-tab-group'), rather than switching its buffer and renaming it
 afterwards.  Anything that reads the new tab while it is being made -- the
-bar's own chip, a treemacs workspace keyed by tab name -- then sees the
-project itself, not the tab this one was split off from."
+bar's own chip, the dired sidecar's listing -- then sees the project
+itself, not the tab this one was split off from."
   (if-let* ((index (my-tab-bar-project-tab-index root)))
       (tab-bar-select-tab (1+ index))
     (let* ((proj (ignore-errors (project-current nil root)))
@@ -420,8 +420,8 @@ Tabs outside a project (*scratch*, say) keep whatever group they had."
 ;; Selecting a tab restores its layout with `window-state-put', whose last
 ;; step puts the saved window parameters back -- on the frame's root window
 ;; as well.  A tab that held one side window and nothing else (a lone pi
-;; sidecar, or treemacs on its own) therefore leaves the root window marked
-;; `window-side' left.  That mark is a trap: `split-window' on the root
+;; sidecar, or a dired listing that was the only window left) therefore
+;; leaves the root window marked `window-side' left.  That mark is a trap: `split-window' on the root
 ;; redirects to `window-main-window' whenever the frame "has a side window"
 ;; (Bug#73627), and `window-main-window' hands the root straight back, since
 ;; the root is the side window it finds.  So the next tab whose layout has
@@ -434,7 +434,7 @@ Tabs outside a project (*scratch*, say) keep whatever group they had."
   "Drop `window-side' and `window-slot' from every frame's root window.
 A root window is never a side window, but a restored window state can
 mark it as one; see the comment above.  Only the root is cleaned, so a
-treemacs or sidecar window further down the tree keeps its parameters."
+sidecar window further down the tree keeps its parameters."
   (dolist (frame (frame-list))
     (let ((root (frame-root-window frame)))
       (when (windowp root)
@@ -462,10 +462,10 @@ again on the way out."
   (add-hook 'easysession-after-load-hook #'my-tabs--unsided-root))
 
 ;; A side window can end up the only window on the frame -- delete the
-;; window beside treemacs and treemacs keeps the `window-side' it was given
-;; -- and that happens on a configuration change; the sweep runs then too.
-;; Clearing a parameter does not change the configuration, so it does not
-;; re-run itself.
+;; window beside a sidecar and the sidecar keeps the `window-side' it was
+;; given -- and that happens on a configuration change; the sweep runs then
+;; too.  Clearing a parameter does not change the configuration, so it does
+;; not re-run itself.
 (add-hook 'window-configuration-change-hook #'my-tabs--unsided-root)
 
 (my-tabs--unsided-root)

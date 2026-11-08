@@ -69,9 +69,10 @@
 ;;
 ;;   pi-subagents.el  live views of subagent runs, in a term buffer
 ;;   pi-annotate.el   /annotate: mark up a file beside its review sidecar
-;;   pi-sidecar.el    status/model/path sidecar for pi terminals, below treemacs
+;;   pi-sidecar.el    status/model/path sidecar for pi terminals
+;;   dired-sidecar.el the workspace's directory listing, above the pi sidecar
 ;;
-;; `C-c P' toggles the sidecar; inside it, RET visits the pi terminal.
+;; `C-c P' toggles the pi sidecar; inside it, RET visits the pi terminal.
 
 (require 'server)
 (unless (server-running-p)
@@ -496,18 +497,7 @@ enabled, and the older one's faces show through where the newer has none."
   :ensure t
   :init
   (load-theme 'doom-one :no-confirm)
-  :bind (("C-c t" . my-toggle-theme))
-  :config
-  ;; Its extras restyle other packages in palette terms; treemacs is loaded
-  ;; later in this file, so wait for it.  The tree's labels are remapped to
-  ;; the `variable-pitch' face by default, which here is "Sans Serif": the
-  ;; tree would be the one buffer drawn in a proportional font, out of step
-  ;; with the windows beside it.  `doom-themes-treemacs-config' reads this
-  ;; switch when it remaps the faces, and again after every `load-theme'
-  ;; through an advice, so it has to be set before that call.
-  (setq doom-themes-treemacs-enable-variable-pitch nil)
-  (with-eval-after-load 'treemacs
-    (doom-themes-treemacs-config)))
+  :bind (("C-c t" . my-toggle-theme)))
 
 ;; ----------------------------------------------------------------------
 ;; cursor and current line
@@ -592,6 +582,14 @@ enabled, and the older one's faces show through where the newer has none."
 (setq pi-sidecar-switch-project-function #'my-tab-bar-select-project)
 (global-set-key (kbd "C-c P") #'pi-sidecar-toggle)
 
+;; dired-sidecar -- the workspace's directory listing in the left column,
+;; above the pi sidecar.  Every tab shows the listing of its own project root,
+;; and TAB turns a directory into a subtree (dired-subtree, configured under
+;; "dired" above).  Loaded after pi-sidecar, so that when the listing is the
+;; one that creates the left column it asks for the pi sidecar's width.
+(require 'dired-sidecar)
+(global-set-key (kbd "C-c T") #'dired-sidecar-toggle)
+
 ;; ----------------------------------------------------------------------
 ;; quitting: no questions
 ;; ----------------------------------------------------------------------
@@ -657,6 +655,21 @@ on `kill-emacs-query-functions'."
   (setq dired-kill-when-opening-new-dired-buffer t)
   :hook (dired-mode . auto-revert-mode))
 
+;; dired-subtree -- TAB on a directory inserts that directory's contents,
+;; indented, right below its line; TAB again takes them away.  This is the
+;; tree the dired sidecar draws (see dired-sidecar.el), and it is why no file
+;; tree package is needed: a subtree is part of the listing, so Dired's own
+;; marks, commands and auto-revert apply to it unchanged.  The package ships
+;; no key bindings of its own, hence the two here; `dired-subtree-cycle',
+;; which opens one level per press and which the package also leaves unbound,
+;; is left for `M-x' or a keymap of its own.
+(use-package dired-subtree
+  :ensure t
+  :after dired
+  :bind (:map dired-mode-map
+              ("TAB" . dired-subtree-toggle)
+              ("<backtab>" . dired-subtree-remove)))
+
 ;; ----------------------------------------------------------------------
 ;; icons in dired and ibuffer
 ;; ----------------------------------------------------------------------
@@ -683,81 +696,6 @@ on `kill-emacs-query-functions'."
          ("C-h x"   . helpful-command)
          ("C-h o"   . helpful-symbol)
          ("C-c C-d" . helpful-at-point)))
-
-;; ----------------------------------------------------------------------
-;; treemacs -- file tree in a side window
-;; ----------------------------------------------------------------------
-
-;; `C-x t' is the tab-bar prefix in Emacs 27+, so the tree gets `C-c T'.
-;; Inside the tree: TAB fold, `?' help, `g' refresh, `q' close.
-(use-package treemacs
-  :ensure t
-  :bind (("C-c T" . treemacs))
-  :init
-  (setq treemacs-follow-mode t
-        treemacs-filewatch-mode t
-        treemacs-fringe-indicator-mode 'always)
-  :config
-  (treemacs-git-mode 'deferred))         ; async git status, cheaper
-
-;; Treemacs' own colours, re-tuned for a reading eye.  Two of its git states
-;; are drawn in the dimmest font-lock faces -- an ignored file in
-;; `font-lock-comment-face', an untracked one in `font-lock-doc-face' -- which
-;; `doom-one' leaves at #5B6268 and #83898D on a #282C34 background.  A
-;; directory listing is mostly ignored paths (caches, `elpa/', build output),
-;; so most of the tree came out at a contrast near 2:1, unreadable.  Both are
-;; blended half-way into the theme's own foreground: they keep their hue, and
-;; land around 4.5:1 and 5.7:1.  The selected line goes the other way --
-;; `hl-line' is #21242B, a shade *below* the background, so the row being
-;; followed is invisible in a side window -- and takes the theme's selection
-;; colour instead.  Both are redone on every theme change, because `C-c t'
-;; flips the palette and `load-theme' puts the faces back.
-(defun my-treemacs--blend (color other alpha)
-  "Return COLOR mixed into OTHER by ALPHA, as a hex colour.
-Both are colour names; ALPHA is how much of COLOR survives."
-  (apply #'color-rgb-to-hex
-         (append (color-blend (color-name-to-rgb color)
-                              (color-name-to-rgb other)
-                              alpha)
-                 ;; Two hex digits per component, not the default four.
-                 '(2))))
-
-(defun my-treemacs-colors (&rest _)
-  "Brighten treemacs' two dim git states and its line highlight."
-  (let ((fg (face-attribute 'default :foreground nil t)))
-    (when (color-name-to-rgb fg)
-      (dolist (pair '((treemacs-git-ignored-face   font-lock-comment-face)
-                      (treemacs-git-untracked-face font-lock-doc-face)))
-        (let ((color (face-attribute (cadr pair) :foreground nil t)))
-          (when (color-name-to-rgb color)
-            (set-face-attribute (car pair) nil :foreground
-                                (my-treemacs--blend color fg 0.5)))))
-      (let ((selection (face-attribute 'region :background nil t)))
-        (when (color-name-to-rgb selection)
-          (set-face-attribute 'treemacs-hl-line-face nil
-                              :background selection))))))
-
-(with-eval-after-load 'treemacs
-  (my-treemacs-colors)
-  (add-hook 'enable-theme-functions #'my-treemacs-colors))
-
-;; treemacs-tab-bar -- one tree per tab-bar tab.  Treemacs ties a tree buffer
-;; and its workspace to a "scope", and ships with a single scope type,
-;; `Frames' (one tree per frame); this extension adds `Tabs'.  Each tab gets
-;; its own buffer and workspace, named after the tab and filled with the
-;; project `project.el' finds in the tab's buffer the first time the tab is
-;; visited, switched by the tab bar's own hooks and dropped when the tab
-;; closes.  The trees keep their space-prefixed buffer names, so the tab line
-;; goes on ignoring them.  `treemacs-scope-types' lists the choices; the
-;; interactive picker is `treemacs-select-buffer-scope-type'.
-(use-package treemacs-tab-bar
-  :ensure t
-  :after treemacs
-  :config
-  ;; Treemacs only knows `Tabs' after this runs, and it kills any tree windows
-  ;; it finds, so it belongs here, at the package's first load (the first
-  ;; `C-c T'), before a tree is drawn.
-  (treemacs-set-scope-type 'Tabs))
 
 ;; ----------------------------------------------------------------------
 ;; markdown
@@ -915,7 +853,8 @@ Both are colour names; ALPHA is how much of COLOR survives."
 
 ;; Org itself is built in, hence `:ensure nil'. `C-c a' is the agenda, `C-c c'
 ;; capture and `C-c l' stores a link; the other single-letter `C-c' keys taken
-;; in this file are `C-c t' (theme), `C-c T' (treemacs) and `C-c g' (ghostel).
+;; in this file are `C-c t' (theme), `C-c T' (dired sidecar) and `C-c g'
+;; (ghostel).
 (use-package org
   :ensure nil
   :bind (("C-c a" . org-agenda)
@@ -994,11 +933,12 @@ Both are colour names; ALPHA is how much of COLOR survives."
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  '(package-selected-packages
-   '(## diminish git vertico consult corfu marginalia embark embark-consult
-     magit with-editor cape diff-hl doom-modeline easysession ef-themes ghostel
-     helpful indent-bars markdown-mode markdown-toc nerd-icons nerd-icons-corfu
-     nerd-icons-dired nerd-icons-ibuffer org-appear org-modern outline-indent
-     pilish rainbow-delimiters treemacs doom-themes)))
+   '(## cape consult corfu diff-hl diminish dired-subtree doom-modeline
+	doom-themes easysession ef-themes embark embark-consult
+	ghostel git helpful indent-bars magit marginalia markdown-mode
+	markdown-toc nerd-icons nerd-icons-corfu nerd-icons-dired
+	nerd-icons-ibuffer org-appear org-modern outline-indent pilish
+	rainbow-delimiters vertico with-editor)))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.

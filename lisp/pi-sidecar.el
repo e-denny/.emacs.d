@@ -12,10 +12,11 @@
 
 ;; A sidecar listing every pi process running in a ghostel terminal of
 ;; this Emacs, with its state, model and working directory.  It is meant
-;; to sit below treemacs, in the same left side window column, and it
-;; looks like the agent panel at the bottom of herdr's sidebar: one row
-;; per agent, a colored dot and the model on the first line, the status
-;; right-aligned, and the path on a dim second line.
+;; to share the left side window column with the dired sidecar, sitting
+;; below that listing, and it looks like the agent panel at the bottom of
+;; herdr's sidebar: one row per agent, a colored dot and the model on the
+;; first line, the status right-aligned, and the path on a dim second
+;; line.
 ;;
 ;; Status comes from the terminal, not from pi's RPC mode.  Pilish drives
 ;; a headless pi in RPC mode and follows `agent_start', `agent_settled',
@@ -46,10 +47,10 @@
 ;; project pi was started in.  The model and path are read locally; pi is
 ;; not expected to run under tmux, herdr or TRAMP here.
 ;;
-;; Placement: a left side window in slot 1, which puts it below treemacs
-;; (slot 0).  Side windows on the same side share their width, so the
-;; sidecar is exactly as wide as treemacs; when treemacs is not open the
-;; width follows `treemacs-width' (or `pi-sidecar-width').
+;; Placement: a left side window in slot 1, which puts it below the dired
+;; sidecar's listing (slot 0).  Side windows on the same side share their
+;; width, so the sidecar is exactly as wide as that listing; alone in the
+;; column, the width follows `pi-sidecar-width' (35 columns by default).
 ;;
 ;; Setup, in init.el, next to the other companion packages:
 ;;
@@ -76,8 +77,8 @@
 (require 'ghostel)
 
 ;; Optional: the mode line at the bottom of the sidecar is drawn by
-;; doom-modeline, the same way treemacs gets its own.  When that package
-;; is missing the sidecar simply has no mode line.
+;; doom-modeline, with a segment of its own.  When that package is
+;; missing the sidecar simply has no mode line.
 (require 'doom-modeline nil t)
 
 (defgroup pi-sidecar nil
@@ -96,18 +97,18 @@ long an unnoticed change can stay stale."
 (defcustom pi-sidecar-height 14
   "Height of the sidecar window.
 An integer is a number of lines; a float is a share of the frame height.
-The window is created below treemacs, so this is how much of the left
-column the sidecar takes from it."
+The window is created below the dired sidecar's listing, so this is how
+much of the left column the sidecar takes from it."
   :type '(choice (integer :tag "Lines")
                  (float :tag "Share of frame"))
   :group 'pi-sidecar)
 
 (defcustom pi-sidecar-width nil
-  "Width of the sidecar window when treemacs is not open.
-When nil, follow `treemacs-width' (35 by default).  While treemacs is
+  "Width of the sidecar window when it is the first in the left column.
+When nil, ask for 35 columns.  While the dired sidecar's listing is
 displayed its actual window width wins, because both windows live in the
 same side area and share that width."
-  :type '(choice (const :tag "Follow treemacs" nil)
+  :type '(choice (const :tag "Default (35 columns)" nil)
                  (integer :tag "Columns"))
   :group 'pi-sidecar)
 
@@ -289,9 +290,8 @@ window and costs no glyph of its own."
 
 ;;;; Mode line
 ;;
-;; Treemacs gets a strip of its own at the bottom of its window, drawn by
-;; doom-modeline.  The sidecar gets the same treatment: a modeline of its
-;; own with the bar at its start and the active/inactive faces that
+;; The sidecar gets a strip of its own at the bottom of its window: a
+;; modeline with the bar at its start and the active/inactive faces that
 ;; doom-modeline picks for the window the strip belongs to, so selecting
 ;; the sidecar lights it up and selecting another window dims it.
 
@@ -315,8 +315,8 @@ window and costs no glyph of its own."
                         'face (doom-modeline-face
                                'doom-modeline-buffer-minor-mode))
             (doom-modeline-spc)))
-  ;; The bar and the mode name on the left, the count on the right --
-  ;; treemacs' strip minus the workspace name.
+  ;; The bar and the mode name on the left, the count on the right, in the
+  ;; shape of the modelines in the windows beside it.
   (doom-modeline-def-modeline 'pi-sidecar
     '(bar " " major-mode)
     '(pi-sidecar-agents)))
@@ -674,23 +674,12 @@ is a plist with `:status' (idle, running, finished, blocked, error),
   :doc "Keymap on a pi agent row."
   "<mouse-1>" #'pi-sidecar-visit-mouse)
 
-(defun pi-sidecar--treemacs-window ()
-  "Return the window showing a treemacs tree, or nil."
-  (seq-find (lambda (window)
-              (with-current-buffer (window-buffer window)
-                (and (fboundp 'treemacs-mode)
-                     (derived-mode-p 'treemacs-mode))))
-            (window-list nil 'nomini)))
-
 (defun pi-sidecar--requested-width ()
-  "Return the width to ask for when the sidecar window is created."
-  (or (when-let* ((window (pi-sidecar--treemacs-window)))
-        (window-total-width window))
-      pi-sidecar-width
-      (and (boundp 'treemacs-width)
-           (integerp treemacs-width)
-           treemacs-width)
-      35))
+  "Return the width to ask for when the sidecar window is created.
+When the dired sidecar's listing is already in the column, the side area
+has a width and both windows share it; this is the answer for when the
+pi sidecar is the first one in."
+  (or pi-sidecar-width 35))
 
 (defun pi-sidecar--render-width ()
   "Return the number of columns available to the sidecar text."
@@ -1085,7 +1074,7 @@ the cursor replacement for moving between rows, not an inactive marker."
 ;;;; Display
 
 (defun pi-sidecar--display (buffer)
-  "Display BUFFER in the left side window below treemacs."
+  "Display BUFFER in the left side window below the dired listing."
   (let* ((width (pi-sidecar--requested-width))
          (window (display-buffer
                   buffer
@@ -1101,7 +1090,7 @@ the cursor replacement for moving between rows, not an inactive marker."
 
 ;;;###autoload
 (defun pi-sidecar-open ()
-  "Open the pi agent sidecar, below treemacs."
+  "Open the pi agent sidecar, below the dired listing."
   (interactive)
   (let ((origin (current-buffer))
         (buffer (get-buffer-create pi-sidecar-buffer-name)))
