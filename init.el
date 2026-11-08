@@ -679,7 +679,13 @@ on `kill-emacs-query-functions'."
 
 (use-package nerd-icons-dired
   :ensure t
-  :hook (dired-mode . nerd-icons-dired-mode))
+  ;; `dired-subtree' splices a subdirectory's lines into the listing itself and
+  ;; only runs its own hooks -- `dired-after-readin-hook', which is where the
+  ;; icons come from, never fires for them -- so an opened subtree's icons have
+  ;; to be asked for after the insert.  The refresh is a no-op at top level and
+  ;; in buffers where the mode is off.
+  :hook ((dired-mode . nerd-icons-dired-mode)
+         (dired-subtree-after-insert . nerd-icons-dired--refresh)))
 
 ;; Note: `nerd-icons-ibuffer-mode' is a buffer-local minor mode, not global.
 (use-package nerd-icons-ibuffer
