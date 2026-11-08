@@ -396,8 +396,10 @@ Tabs outside a project (*scratch*, say) keep whatever group they had."
       (unless (equal (alist-get 'group tab) root)
         (tab-bar-change-tab-group root)))))
 
-(add-hook 'tab-bar-tab-post-select-functions #'my-tab-bar-group-by-project)
-(add-hook 'tab-bar-tab-post-open-functions #'my-tab-bar-group-by-project)
+;; The tabs' own hooks: the group is settled before anything else reads it --
+;; the sidecars choose what to show from it -- hence the low depth.
+(add-hook 'tab-bar-tab-post-select-functions #'my-tab-bar-group-by-project -20)
+(add-hook 'tab-bar-tab-post-open-functions #'my-tab-bar-group-by-project -20)
 
 ;; The tab that exists at startup is never opened or selected, so group it
 ;; here; that way its chip selects it rather than creating a second tab.

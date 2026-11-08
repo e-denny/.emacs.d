@@ -52,6 +52,13 @@
 ;; width, so the sidecar is exactly as wide as that listing; alone in the
 ;; column, the width follows `pi-sidecar-width' (35 columns by default).
 ;;
+;; It is kept in every workspace: the tab bar's own hooks put it into the
+;; tab being selected, so switching tabs never leaves a workspace without
+;; it, and a session restores it with the windows it was saved with.  Only
+;; one buffer is involved -- the agent list is the same everywhere -- but
+;; each tab keeps its own side window for it, with the height the tab was
+;; left with.
+;;
 ;; Setup, in init.el, next to the other companion packages:
 ;;
 ;;   (require 'pi-sidecar)
@@ -59,7 +66,9 @@
 ;;   (global-set-key (kbd "C-c P") #'pi-sidecar-toggle)
 ;;
 ;; `pi-sidecar-toggle' opens the sidecar and refreshes it; with it open,
-;; `q' closes it.  In the sidecar, `n'/`p' (or the arrow keys) move
+;; `q' closes it.  Either one closes it in every workspace, not only the
+;; one being looked at: the hooks that keep it visible respect that until
+;; `C-c P' asks for it back.  In the sidecar, `n'/`p' (or the arrow keys) move
 ;; between agents, `s' switches the ordering, `g' refreshes now, and
 ;; `RET' or `mouse-1' visits the agent's ghostel buffer in its project.
 ;; The list refreshes every `pi-sidecar-refresh-interval' seconds, and
@@ -275,6 +284,12 @@ window and costs no glyph of its own."
 
 (defvar pi-sidecar--timer nil
   "Repeating refresh timer, or nil while the sidecar is closed.")
+
+(defvar pi-sidecar--hidden nil
+  "Non-nil when the sidecar was closed on purpose.
+The tab bar's hooks keep the sidecar in every workspace; this is what
+stops them from bringing back one that `C-c P' or `q' has just closed.
+`C-c P' clears it.")
 
 (defvar pi-sidecar--refresh-pending nil
   "Non-nil while a hook-triggered refresh is already scheduled.")
@@ -942,13 +957,16 @@ call would put the sidecar back in front as it unwound."
   (message "Pi sidecar sorted by %s" pi-sidecar-sort))
 
 (defun pi-sidecar-quit ()
-  "Close the sidecar window."
+  "Close the sidecar window, in this workspace and the others.
+`pi-sidecar-open' -- `C-c P' -- is what brings it back."
   (interactive)
+  (setq pi-sidecar--hidden t)
   (pi-sidecar--stop-timer)
   (pi-sidecar--remove-hooks)
-  (let ((window (get-buffer-window pi-sidecar-buffer-name t)))
-    (if window
-        (quit-window nil window)
+  (let ((windows (pi-sidecar--windows)))
+    (if windows
+        (dolist (window windows)
+          (quit-window nil window))
       (when-let* ((buffer (get-buffer pi-sidecar-buffer-name)))
         (kill-buffer buffer)))))
 
@@ -1084,14 +1102,54 @@ the cursor replacement for moving between rows, not an inactive marker."
                     (window-width . ,width)
                     (window-height . ,pi-sidecar-height)))))
     (when (window-live-p window)
+      (unless (eq (window-buffer window) buffer)
+        ;; A restored window can come back dedicated to what it held before;
+        ;; it is the sidecar's window now, so take it over.
+        (when (window-dedicated-p window)
+          (set-window-dedicated-p window nil))
+        (set-window-buffer window buffer))
       (set-window-dedicated-p window t)
       (set-window-parameter window 'no-delete-other-windows t))
     window))
+
+(defun pi-sidecar--window (&optional frame)
+  "Return FRAME's pi sidecar window, or nil."
+  (seq-find (lambda (window)
+              (with-current-buffer (window-buffer window)
+                (derived-mode-p 'pi-sidecar-mode)))
+            (window-list frame 'nomini)))
+
+(defun pi-sidecar--windows ()
+  "Return every pi sidecar window, on every frame."
+  (seq-filter (lambda (window)
+                (with-current-buffer (window-buffer window)
+                  (derived-mode-p 'pi-sidecar-mode)))
+              (mapcan (lambda (frame) (window-list frame 'nomini))
+                      (frame-list))))
+
+(defun pi-sidecar--follow-tab (&rest _)
+  "Put the sidecar into the current workspace, or take it out of it.
+Run from the tab bar's hooks, so the agent list is there in every tab the
+way the dired listing above it is.  A tab that restores its own sidecar
+window already has one; only a tab without it asks for a new one, which is
+what keeps each tab's height its own.
+
+A hidden sidecar is removed here rather than merely left unmade, because a
+tab restores the windows it was saved with -- the sidecar among them -- and
+would otherwise bring back what `C-c P' has just closed."
+  (if pi-sidecar--hidden
+      (when-let* ((window (pi-sidecar--window)))
+        (ignore-errors (delete-window window)))
+    (if (pi-sidecar--window)
+        (progn (pi-sidecar--start-timer)
+               (pi-sidecar--install-hooks))
+      (pi-sidecar-open))))
 
 ;;;###autoload
 (defun pi-sidecar-open ()
   "Open the pi agent sidecar, below the dired listing."
   (interactive)
+  (setq pi-sidecar--hidden nil)
   (let ((origin (current-buffer))
         (buffer (get-buffer-create pi-sidecar-buffer-name)))
     (with-current-buffer buffer
@@ -1113,11 +1171,21 @@ the cursor replacement for moving between rows, not an inactive marker."
 
 ;;;###autoload
 (defun pi-sidecar-toggle ()
-  "Show or hide the pi agent sidecar."
+  "Show or hide the pi agent sidecar.
+Hiding it hides it from every workspace: the hooks that keep it visible
+stay out of the way until this is called again."
   (interactive)
-  (if (get-buffer-window pi-sidecar-buffer-name t)
+  (if (pi-sidecar--window)
       (pi-sidecar-quit)
     (pi-sidecar-open)))
+
+;; Each tab shows the sidecar, so the tab bar's hooks are where it follows
+;; the workspace; a session puts it back after the windows are restored.
+;; The depths keep the order readable: the tab's group is settled first
+;; (my-tabs uses -20), the dired listing follows at 0, the sidecar at 10.
+(add-hook 'tab-bar-tab-post-select-functions #'pi-sidecar--follow-tab 10)
+(add-hook 'tab-bar-tab-post-open-functions #'pi-sidecar--follow-tab 10)
+(add-hook 'emacs-startup-hook #'pi-sidecar--follow-tab 110)
 
 ;;;; Mode
 

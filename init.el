@@ -72,7 +72,7 @@
 ;;   pi-sidecar.el    status/model/path sidecar for pi terminals
 ;;   dired-sidecar.el the workspace's directory listing, above the pi sidecar
 ;;
-;; `C-c P' toggles the pi sidecar; inside it, RET visits the pi terminal.
+;; Both sidecars are kept in every tab; `C-c P' and `C-c T' hide them.
 
 (require 'server)
 (unless (server-running-p)
@@ -574,7 +574,9 @@ enabled, and the older one's faces show through where the newer has none."
   :config (ghostel-restore-mode 1))
 
 ;; pi-sidecar -- the status/model/path panel for pi terminals.  Loaded here,
-;; after ghostel's own configuration, because it requires ghostel.
+;; after ghostel's own configuration, because it requires ghostel.  Every tab
+;; keeps it under the dired listing; `C-c P' hides it from all of them until
+;; pressed again, and RET inside it visits the agent's terminal.
 (require 'pi-sidecar)
 ;; Visiting an agent switches the frame to the agent's project first, so the
 ;; tab bar's chip and the tab line follow the terminal instead of the

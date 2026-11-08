@@ -19,8 +19,8 @@
 ;;
 ;; The listing is an ordinary Dired buffer, so every Dired command works in
 ;; it: RET and the mouse open a file in the main window and leave the listing
-;; where it is, `m' marks, `C' copies, `g' reads the directory again and `q'
-;; closes the window.  What makes it a tree is `dired-subtree' (bound to TAB
+;; where it is, `m' marks, `C' copies, `g' reads the directory again, and `q'
+;; hides the sidecar in every tab -- `C-c T' brings it back.  What makes it a tree is `dired-subtree' (bound to TAB
 ;; over all Dired buffers in init.el): TAB on a directory inserts the
 ;; directory's own listing indented below its line, TAB again takes it away,
 ;; and `dired-subtree-cycle' opens a level per TAB.  That is what the tree is
@@ -138,6 +138,9 @@ the tree itself."
     (set-keymap-parent map (current-local-map))
     (define-key map (kbd "RET") #'dired-find-file-other-window)
     (define-key map (kbd "f") #'dired-find-file-other-window)
+    ;; `quit-window' would bury the listing and have it come back on the next
+    ;; tab switch; hiding it puts it away everywhere instead, as `C-c T' does.
+    (define-key map (kbd "q") #'dired-sidecar-toggle)
     (use-local-map map)))
 
 (defun dired-sidecar--buffer (root)
@@ -191,11 +194,12 @@ No height is asked for when the column is still empty: a side window
 without one takes the side area it is the first into, and the pi sidecar's
 own height is what it carves out below this one.
 
-The window is not dedicated, unlike the pi sidecar's.  A tab restores the
-sidecar window it saved, listing and all, and `set-window-buffer' on a
-dedicated window refuses a different buffer -- \"Window is dedicated to
-...\", out of the tab switch itself -- while a plain one takes the
-listing the restore brought and has it corrected afterwards."
+The window is dedicated to the listing it shows, which is what keeps the
+pi sidecar's `display-buffer' -- or any other -- from taking the window for
+its own buffer.  `--show' drops that mark when it has to put another
+project's listing in it, because `set-window-buffer' refuses a dedicated
+window; a tab that restores the window with the listing it saved is why
+that is needed and not just a precaution."
   (let ((window (display-buffer
                  buffer
                  `((display-buffer-in-side-window)
@@ -205,7 +209,13 @@ listing the restore brought and has it corrected afterwards."
                    ,@(when-let* ((height (dired-sidecar--requested-height)))
                        `((window-height . ,height)))))))
     (when (window-live-p window)
-      (set-window-parameter window 'no-delete-other-windows t))
+      (set-window-parameter window 'no-delete-other-windows t)
+      ;; Dedicated to the listing, not to the side: this keeps
+      ;; `display-buffer' -- the pi sidecar's -- from taking the window over
+      ;; for its own buffer, while the package itself can still put another
+      ;; project's listing in it (`--show' clears the mark to do so).
+      (when (eq (window-buffer window) buffer)
+        (set-window-dedicated-p window buffer)))
     window))
 
 (defun dired-sidecar--window (&optional frame)
@@ -247,28 +257,55 @@ along."
     (let ((window (dired-sidecar--window)))
       (cond
        ((and window (eq (window-buffer window) buffer)) nil)
-       (window (set-window-buffer window buffer))
+       (window
+        ;; The window is ours, so its dedication is ours to drop: it holds
+        ;; the listing that was there before, or a tab restored a window
+        ;; strongly dedicated to something else in its place, and
+        ;; `set-window-buffer' refuses either.
+        (when (window-dedicated-p window)
+          (set-window-dedicated-p window nil))
+        (set-window-buffer window buffer)
+        (set-window-dedicated-p window buffer))
        (t (dired-sidecar--display buffer))))))
+
+(defvar dired-sidecar--hidden nil
+  "Non-nil when the listing was closed on purpose.
+The tab bar's hooks keep the listing in every workspace; this is what
+stops them from bringing back one that `C-c T' or `q' has just closed.
+`C-c T' clears it.")
+
+(defun dired-sidecar--follow-tab (&rest _)
+  "Show the workspace's listing, or take the sidecar out when it was hidden.
+A tab restores the window it was saved with -- the listing among them --
+so a hidden sidecar has to be removed here and not merely left unmade."
+  (if dired-sidecar--hidden
+      (when-let* ((window (dired-sidecar--window)))
+        (ignore-errors (delete-window window)))
+    (dired-sidecar--show)))
 
 (defun dired-sidecar-toggle ()
   "Show the directory sidecar, or hide it.
 Hiding deletes the window only: the buffer keeps its directory and the
 subtrees opened in it, so toggling back on returns to the listing as it
-was left."
+was left.  It hides in every workspace, not just this one, since the hooks
+that keep it visible respect the mark until this is called again."
   (interactive)
   (if-let* ((window (dired-sidecar--window)))
-      (delete-window window)
+      (progn
+        (setq dired-sidecar--hidden t)
+        (delete-window window))
+    (setq dired-sidecar--hidden nil)
     (dired-sidecar--show)))
 
-(add-hook 'tab-bar-tab-post-select-functions #'dired-sidecar--show)
-(add-hook 'tab-bar-tab-post-open-functions #'dired-sidecar--show)
-(add-hook 'tab-bar-tab-post-change-group-functions #'dired-sidecar--show)
+(add-hook 'tab-bar-tab-post-select-functions #'dired-sidecar--follow-tab)
+(add-hook 'tab-bar-tab-post-open-functions #'dired-sidecar--follow-tab)
+(add-hook 'tab-bar-tab-post-change-group-functions #'dired-sidecar--follow-tab)
 
 ;; A session brings its tabs back with the windows they were saved with, and
 ;; `easysession' restores at depth 102; the listing is put in its place after
 ;; that, since the saved window may predate this package or hold another
 ;; project's listing.
-(add-hook 'emacs-startup-hook #'dired-sidecar--show 110)
+(add-hook 'emacs-startup-hook #'dired-sidecar--follow-tab 110)
 
 (provide 'dired-sidecar)
 ;;; dired-sidecar.el ends here
