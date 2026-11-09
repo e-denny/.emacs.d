@@ -625,6 +625,26 @@ and so would otherwise look like they belonged to that buffer's project."
   (and (my-tabs--workspace-buffer-p buffer)
        (my-tabs-buffer-group buffer)))
 
+(defvar-local my-tabs--last-workspace nil
+  "The workspace the buffer was last shown in.
+A buffer whose project is known belongs to that project instead; this is
+what gives `*scratch*', a file outside every project, or a terminal whose
+shell has left its project a single workspace to live in.  It is set
+every time a window takes the buffer over, so showing such a buffer in
+another workspace moves it there.")
+
+(defun my-tabs--buffer-in-workspace-p (buffer workspace)
+  "Non-nil when BUFFER belongs in WORKSPACE.
+A buffer with a project belongs to that project's workspace; a buffer
+with no project belongs to the workspace it was last shown in, so a
+stale entry -- one recorded for a workspace the buffer was never shown
+in -- does not belong anywhere."
+  (and (buffer-live-p buffer)
+       (if-let* ((project (my-tabs-buffer-group buffer)))
+           (equal project workspace)
+         (equal (buffer-local-value 'my-tabs--last-workspace buffer)
+                workspace))))
+
 (defun my-tabs--tab-workspace (&optional frame)
   "The workspace of FRAME's current tab: the tab's group, or nil."
   (let ((tab (assq 'current-tab (funcall tab-bar-tabs-function
@@ -637,10 +657,20 @@ and so would otherwise look like they belonged to that buffer's project."
               (window-list frame 'nomini)))
 
 (defun my-tabs--owned (window)
-  "The buffers WINDOW owns, the most recently displayed first."
+  "The buffers WINDOW owns, the most recently displayed first.
+A buffer that belongs to another workspace now -- a terminal whose shell
+`cd'ed into another project, say -- is dropped, and the shortened list is
+written back."
   (let ((owned (window-parameter window 'my-tabs-buffers)))
     (if owned
-        (seq-filter #'buffer-live-p owned)
+        (let* ((workspace (my-tabs--tab-workspace (window-frame window)))
+               (kept (seq-filter
+                      (lambda (buffer)
+                        (my-tabs--buffer-in-workspace-p buffer workspace))
+                      owned)))
+          (unless (equal kept owned)
+            (my-tabs--set-owned window kept))
+          kept)
       (my-tabs--own-history window))))
 
 (defun my-tabs--own-history (window)
@@ -655,7 +685,7 @@ Buffers another window of the tab already owns are left to that window."
                  (lambda (buffer)
                    (and (my-tabs--workspace-buffer-p buffer)
                         (not (memq buffer taken))
-                        (equal workspace (my-tabs--workspace buffer))))
+                        (my-tabs--buffer-in-workspace-p buffer workspace)))
                  (delete-dups (copy-sequence history)))))
     (my-tabs--set-owned window owned)
     owned))
@@ -713,6 +743,12 @@ again would hand it straight back."
   "Make BUFFER the current tab of WINDOW, taking it from the other windows.
 The window that loses BUFFER falls back to its own newest remaining tab."
   (let ((my-tabs--reconciling t))
+    ;; A buffer with no project of its own is a tab of the workspace it is
+    ;; shown in; a buffer with a project ignores this and follows the
+    ;; project.
+    (with-current-buffer buffer
+      (setq-local my-tabs--last-workspace
+                  (my-tabs--tab-workspace (window-frame window))))
     ;; Record BUFFER for WINDOW first, so that seeding the window that
     ;; loses it cannot take the buffer back.
     (my-tabs--set-owned window
@@ -768,11 +804,9 @@ window of the tab already owns moves to the window that selected it."
         (let* ((buffer (window-buffer window))
                (workspace (my-tabs--workspace buffer))
                (tab (my-tabs--tab-workspace (window-frame window))))
-          (cond
-           ((null workspace) nil)
-           ((not (equal workspace tab))
-            (my-tabs--follow workspace buffer))
-           (t (my-tabs--claim window buffer))))))))
+          (if (and workspace (not (equal workspace tab)))
+              (my-tabs--follow workspace buffer)
+            (my-tabs--claim window buffer)))))))
 
 (defvar my-tabs--reconcile-state nil
   "The window and buffer `my-tabs--reconcile' last looked at.
@@ -824,7 +858,7 @@ from, and that tab would be current above both windows."
                 (my-tabs--claim window candidate)
                 (set-window-buffer window candidate))
             (my-tabs--new-buffer window)
-            (my-tabs--set-owned window (list (window-buffer window)))))))))
+            (my-tabs--claim window (window-buffer window))))))))
 
 (defun my-tabs--split (split &rest args)
   "Call SPLIT with ARGS, then give the new window a tab of its own."
