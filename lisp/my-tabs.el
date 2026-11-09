@@ -611,12 +611,38 @@ front of the name."
 (defvar my-tabs--reconciling nil
   "Non-nil while the workspace rules are moving buffers between windows.")
 
+;; The left column's panels are buffers like any other -- the listing even
+;; sits in a project directory, so `project-current' in it answers with the
+;; workspace it belongs to -- and the workspace rules would otherwise take
+;; them for tabs: offering the agent panel as the buffer a new split should
+;; show, listing it in a window's tab line, or recording it as owned by the
+;; window it was shown in.  Naming the panels here keeps that out of the
+;; sidecar packages, which need not know about the tab line at all.
+(defcustom my-tabs-side-panel-buffer-names
+  '("\\`\\*pi-sidecar\\*\\'" "\\` \\*dired-sidecar ")
+  "Regexps matching buffers that are side panels, not workspace tabs.
+A panel buffer belongs to the frame's left column, never to a window of
+its own, so the workspace rules leave it alone: it is not offered as a
+tab a split may start on, not listed in a window's tab line, and not
+taken over by the window that displays it."
+  :type '(repeat regexp)
+  :group 'tab-line)
+
+(defun my-tabs--side-panel-buffer-p (buffer)
+  "Non-nil when BUFFER is one of the left column's panels."
+  (and (buffer-live-p buffer)
+       (seq-some (lambda (regexp)
+                   (and (string-match-p regexp (buffer-name buffer)) t))
+                 my-tabs-side-panel-buffer-names)))
+
 (defun my-tabs--workspace-buffer-p (buffer)
   "Non-nil when BUFFER is a buffer a tab may show.
 Internal buffers, the ones drawn with a leading space (the minibuffer
 among them), inherit `default-directory' from whatever buffer was current
-and so would otherwise look like they belonged to that buffer's project."
+and so would otherwise look like they belonged to that buffer's project.
+The side panels are left to the left column for the same reason."
   (and (buffer-live-p buffer)
+       (not (my-tabs--side-panel-buffer-p buffer))
        (not (string-prefix-p " " (buffer-name buffer)))
        (not (eq (buffer-local-value 'major-mode buffer) 'minibuffer-mode))))
 
@@ -896,6 +922,82 @@ remaining tab, or to a new terminal, when TAB was the one it showed."
            (delq buffer (window-parameter window 'my-tabs-buffers))))))))
 
 (add-hook 'kill-buffer-hook #'my-tabs--forget-killed-buffer)
+
+;;;; Restoring a tab's windows
+;;
+;; The tab bar brings a tab back from the window state saved when it was
+;; left, and that state is only as good as the layout it was taken from.
+;; The left column is the fragile part of it: a panel that had slipped into
+;; the main area is saved as an ordinary window, and a tab whose main
+;; window was gone is saved with panels and nothing else.  Selecting such a
+;; tab puts the directory listing where the project's buffer belongs, or
+;; leaves the frame with no main window at all -- and the panels' own hooks
+;; then keep what they find, because the listing and the agent panel are
+;; where they were told to be.
+;;
+;; So the main area is settled first, before the sidecar hooks that follow
+;; this one: a main-area window holding a panel buffer is given back the
+;; workspace buffer it should have, and the panels are left to
+;; `dired-sidecar--follow-tab' and `pi-sidecar--follow-tab', which then find
+;; no window of their own and rebuild the column in its place.
+(defun my-tabs--reseed-buffer (window)
+  "Return a workspace buffer to show in WINDOW instead of a panel buffer.
+WINDOW's own history comes first: the tab restored it along with the
+buffer that took the window over, so it still knows what the window held.
+After that, the workspace's most recently used buffer that no window of
+the frame shows; nil when the workspace has nothing left."
+  (let* ((workspace (my-tabs--tab-workspace (window-frame window)))
+         (displayed (mapcar (lambda (other) (window-buffer other))
+                            (window-list (window-frame window) 'nomini)))
+         (usable-p (lambda (buffer)
+                     (and (my-tabs--workspace-buffer-p buffer)
+                          (not (memq buffer displayed))
+                          (my-tabs--buffer-in-workspace-p buffer workspace)))))
+    (or (seq-find usable-p (mapcar #'car (window-prev-buffers window)))
+        (seq-find usable-p (buffer-list)))))
+
+(defun my-tabs--reseed (window)
+  "Give WINDOW the workspace buffer a side panel has taken it over with.
+Only WINDOW's tab list is written: the buffer may well still be owned by
+another window, and `my-tabs--reconcile' is what shares it out.  The panel
+had the window to itself, so its dedication is dropped first."
+  (let ((buffer (or (my-tabs--reseed-buffer window)
+                    (progn (my-tabs--new-buffer window)
+                           (window-buffer window)))))
+    (when (window-dedicated-p window)
+      (set-window-dedicated-p window nil))
+    (unless (eq buffer (window-buffer window))
+      (set-window-buffer window buffer))
+    (my-tabs--set-owned window (list buffer))))
+
+(defun my-tabs--restore-main-windows (&rest _)
+  "Put the frame's main windows back in the shape a tab expects.
+A main-area window showing a side panel -- the directory listing or the
+agent panel, which a restored tab can leave there -- gets a workspace
+buffer again.  A frame with nothing but side windows gets a main window
+split off, since the panels cannot be the only thing on it."
+  (let ((windows (window-list nil 'nomini)))
+    (dolist (window windows)
+      (unless (window-parameter window 'window-side)
+        (when (my-tabs--side-panel-buffer-p (window-buffer window))
+          (my-tabs--reseed window))))
+    (unless (seq-some (lambda (window)
+                        (null (window-parameter window 'window-side)))
+                      windows)
+      ;; Everything left is a side window: the panels, with no window for
+      ;; the workspace's own buffer to go back into.
+      (when-let* ((window (ignore-errors
+                           (split-window (frame-root-window) nil 'below))))
+        (when (window-live-p window)
+          (my-tabs--reseed window))))))
+
+;; Depth -10, so the main area is settled before the panels' hooks
+;; (`dired-sidecar--follow-tab' at 0, `pi-sidecar--follow-tab' at 10).  At
+;; startup the session is restored at 102 and the panels follow at 110, so
+;; the frame's own windows are repaired between them.
+(add-hook 'tab-bar-tab-post-select-functions #'my-tabs--restore-main-windows -10)
+(add-hook 'tab-bar-tab-post-open-functions #'my-tabs--restore-main-windows -10)
+(add-hook 'emacs-startup-hook #'my-tabs--restore-main-windows 105)
 
 ;; ----------------------------------------------------------------------
 ;; following the theme

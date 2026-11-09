@@ -517,6 +517,23 @@ that is needed and not just a precaution."
               (buffer-local-value 'dired-sidecar-root (window-buffer window)))
             (window-list frame 'nomini)))
 
+(defun dired-sidecar--in-place-p (window)
+  "Non-nil when WINDOW is the left column's first side window.
+A tab can restore the listing as an ordinary window -- the window state it
+was saved with had already lost the side parameters, because the window was
+in the wrong place when the tab was left -- and a window like that keeps
+its place in the main area through every tab switch until it is given up."
+  (and (eq (window-parameter window 'window-side) 'left)
+       (equal (window-parameter window 'window-slot) 0)))
+
+(defun dired-sidecar--movable-p (window)
+  "Non-nil when WINDOW may be removed to put a panel back in its column.
+The frame's main window may not: it is the only place the workspace's own
+buffer can be shown, and replacing what it displays belongs to
+`my-tabs--restore-main-windows', which runs before this package's hooks."
+  (and (window-parent window)
+       (not (eq window (window-main-window (window-frame window))))))
+
 ;;;; Following the workspace
 
 (defun dired-sidecar--workspace-root ()
@@ -549,7 +566,17 @@ along."
               (buffer (dired-sidecar--buffer root)))
     (let ((window (dired-sidecar--window)))
       (cond
-       ((and window (eq (window-buffer window) buffer)) nil)
+       ((and window (eq (window-buffer window) buffer)
+             (dired-sidecar--in-place-p window))
+        nil)
+       ((and window (not (dired-sidecar--in-place-p window))
+             (dired-sidecar--movable-p window))
+        ;; The listing is out of the column, in a window that can be given
+        ;; up: take the window away and show the listing again where it
+        ;; belongs.  The frame's main window is left alone; a listing there
+        ;; is the main area's problem, not this package's.
+        (delete-window window)
+        (dired-sidecar--display buffer))
        (window
         ;; The window is ours, so its dedication is ours to drop: it holds
         ;; the listing that was there before, or a tab restored a window

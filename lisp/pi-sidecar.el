@@ -1119,6 +1119,28 @@ the cursor replacement for moving between rows, not an inactive marker."
                 (derived-mode-p 'pi-sidecar-mode)))
             (window-list frame 'nomini)))
 
+(defun pi-sidecar--in-place-p (window)
+  "Non-nil when WINDOW is the left column's second side window.
+A restored tab can leave the sidecar in the main area: the window state it
+was saved with had already lost the side parameters, because the tab was
+left while the sidecar was in the wrong place.  Displaying it again in that
+window would keep it there."
+  (and (eq (window-parameter window 'window-side) 'left)
+       (equal (window-parameter window 'window-slot) 1)))
+
+(defun pi-sidecar--restore-window (window)
+  "Move the sidecar out of WINDOW, a window of the main area.
+The window is removed first, so that `display-buffer' has to make a side
+window for the sidecar instead of reusing this one.  The frame's main
+window is left where it is: it is the only place the workspace's own
+buffer can go, and `my-tabs--restore-main-windows' takes the sidecar out of
+it before this package's hooks run."
+  (let ((buffer (window-buffer window)))
+    (when (and (window-parent window)
+               (not (eq window (window-main-window (window-frame window)))))
+      (delete-window window)
+      (pi-sidecar--display buffer))))
+
 (defun pi-sidecar--windows ()
   "Return every pi sidecar window, on every frame."
   (seq-filter (lambda (window)
@@ -1140,9 +1162,12 @@ would otherwise bring back what `C-c P' has just closed."
   (if pi-sidecar--hidden
       (when-let* ((window (pi-sidecar--window)))
         (ignore-errors (delete-window window)))
-    (if (pi-sidecar--window)
-        (progn (pi-sidecar--start-timer)
-               (pi-sidecar--install-hooks))
+    (if-let* ((window (pi-sidecar--window)))
+        (progn
+          (unless (pi-sidecar--in-place-p window)
+            (pi-sidecar--restore-window window))
+          (pi-sidecar--start-timer)
+          (pi-sidecar--install-hooks))
       (pi-sidecar-open))))
 
 ;;;###autoload
