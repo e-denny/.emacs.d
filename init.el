@@ -589,7 +589,9 @@ enabled, and the older one's faces show through where the newer has none."
 ;; each entry carries a bar with its state in the repository, and TAB turns a
 ;; directory into a subtree (dired-subtree, configured under "dired" above).
 ;; Loaded after pi-sidecar, so that when the listing is the one that creates
-;; the left column it asks for the pi sidecar's width.
+;; the left column it asks for the pi sidecar's width.  `C-c T' toggles it,
+;; as does `M-x dired-sidecar-toggle' -- autoloaded, so it answers in `M-x'
+;; even before this file is loaded, and aliased as `dired-sidebar-toggle'.
 (require 'dired-sidecar)
 (global-set-key (kbd "C-c T") #'dired-sidecar-toggle)
 

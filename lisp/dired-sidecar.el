@@ -440,8 +440,15 @@ already drawn are taken away again."
 ;; The bars take their colour from faces that inherit from the theme, but a
 ;; bar already drawn keeps the colour it was given, so a theme change has to
 ;; read the state again -- `C-c t' should recolor the bars as it recolors
-;; everything else.
-(add-hook 'enable-theme-functions #'dired-sidecar--git-refresh)
+;; everything else.  `enable-theme-functions' hands the function the theme it
+;; has just enabled, so this takes an argument; without it every theme change
+;; -- and `load-theme' does not catch it -- ends in a wrong-number-of-arguments
+;; error after the theme is half applied.
+(defun dired-sidecar--after-enable-theme (&rest _)
+  "Re-check the bars after a theme has been enabled."
+  (dired-sidecar--git-refresh))
+
+(add-hook 'enable-theme-functions #'dired-sidecar--after-enable-theme)
 
 ;;;; Display
 
@@ -572,6 +579,7 @@ so a hidden sidecar has to be removed here and not merely left unmade."
         (ignore-errors (delete-window window)))
     (dired-sidecar--show)))
 
+;;;###autoload
 (defun dired-sidecar-toggle ()
   "Show the directory sidecar, or hide it.
 Hiding deletes the window only: the buffer keeps its directory and the
@@ -585,6 +593,14 @@ that keep it visible respect the mark until this is called again."
         (delete-window window))
     (setq dired-sidecar--hidden nil)
     (dired-sidecar--show)))
+
+;; The listing is a sidebar and the package calls it a sidecar, so `M-x' should
+;; answer to both names: the autoloaded alias is what puts the word the feature
+;; is looked up by into the completion list, before this file has been read.
+;;;###autoload
+(defalias 'dired-sidebar-toggle #'dired-sidecar-toggle
+  "Show the directory sidebar, or hide it.
+An alias for `dired-sidecar-toggle'.")
 
 (add-hook 'tab-bar-tab-post-select-functions #'dired-sidecar--follow-tab)
 (add-hook 'tab-bar-tab-post-open-functions #'dired-sidecar--follow-tab)
