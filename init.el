@@ -475,6 +475,29 @@ for the whole of a command, and nil in a timer or a filter."
   (setq outline-indent-ellipsis " \u25bc"))
 
 ;; ----------------------------------------------------------------------
+;; window navigation: windmove
+;; ----------------------------------------------------------------------
+
+;; windmove -- move between the windows of the frame with ALT+arrows.  Built
+;; in, hence `:ensure nil'.  `windmove-wrap-around' carries a move that runs
+;; off the edge of the frame on to the window at the opposite edge, so
+;; ALT+right from the rightmost window lands in the leftmost one.
+;;
+;; The keys are ALT+arrows, which Emacs spells M-<left> and friends.  That
+;; takes M-<left> and M-<right> away from `left-word'/`right-word'; word
+;; motion stays on C-<left>/C-<right> and M-f/M-b.  A terminal keeps the keys
+;; for itself by default -- ghostel sends every modified arrow key to the
+;; program -- so the ghostel section below lists them as exceptions.
+(use-package windmove
+  :ensure nil
+  :init
+  (setq windmove-wrap-around t)
+  :bind (("M-<left>" . windmove-left)
+         ("M-<right>" . windmove-right)
+         ("M-<up>" . windmove-up)
+         ("M-<down>" . windmove-down)))
+
+;; ----------------------------------------------------------------------
 ;; theme
 ;; ----------------------------------------------------------------------
 
@@ -556,7 +579,18 @@ enabled, and the older one's faces show through where the newer has none."
   ;; buffers with running processes (...); exit anyway?") nor on `C-x k'
   ;; with a command running in it.  Both prompts come from
   ;; `ghostel--query-before-killing-p', which reads this variable.
-  (setq ghostel-query-before-killing nil))
+  (setq ghostel-query-before-killing nil)
+  :config
+  ;; ALT+arrows are window navigation (`windmove', configured above), so in a
+  ;; terminal they pass through to Emacs instead of being sent to the program.
+  ;; `ghostel-keymap-exceptions' is the package's own list of such keys, and
+  ;; its :set function rebuilds the semi-char keymap in place, so this takes
+  ;; effect for terminals already open as well as for new ones.  Char mode
+  ;; (C-c M-d) still sends every key, exceptions included.
+  (customize-set-variable
+   'ghostel-keymap-exceptions
+   (append '("M-<left>" "M-<right>" "M-<up>" "M-<down>")
+           ghostel-keymap-exceptions)))
 
 ;; ghostel-restore -- terminals come back with the session, in the directory
 ;; they were in, and a pi that was running in one is resumed with the same
