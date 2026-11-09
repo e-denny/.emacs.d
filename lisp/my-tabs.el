@@ -39,8 +39,11 @@
 ;; --------------------------------------------------------------- tab line
 ;;
 ;; The tab line is the buffer switcher, and it follows the blog's shape: the
-;; tabs are the buffers of the current project, sorted alphabetically
-;; (`tab-line-tabs-buffer-group-sort-function'), with no new-tab.  Each tab
+;; tabs are buffers of the project, sorted alphabetically
+;; (`tab-line-tabs-buffer-group-sort-function'), with no new-tab.  A buffer
+;; is a tab of one window only: the project's buffers are shared out
+;; between its windows, so the same tab never appears above two of them and
+;; the buffer shown in one window is never shown in another.  Each tab
 ;; starts with its buffer's file type icon (`nerd-icons') and ends with a
 ;; cross that closes it, which is `tab-line-close-button' redrawn as a Nerd
 ;; Font glyph so it sits in the tab's own color instead of as an SVG image.
@@ -389,9 +392,16 @@ Chip keys are `project-N' rather than `tab-N', which keeps
 ;; project stay adjacent (`tab-bar-tab-post-change-group-functions').
 (defun my-tab-bar-group-by-project (&rest _)
   "Put the current tab into the tab group of its project.
-Tabs outside a project (*scratch*, say) keep whatever group they had."
+Tabs outside a project (*scratch*, say) keep whatever group they had.
+The project is read from the buffer of the selected window, not from
+`current-buffer': after a tab switch the windows have been restored but
+the current buffer is still the one of the tab being left, and filing the
+tab under that buffer's project is how tabs and buffers drifted apart."
   (when-let* ((tab (assq 'current-tab (funcall tab-bar-tabs-function)))
-              (proj (project-current)))
+              (window (selected-window))
+              ((not (window-minibuffer-p window)))
+              (proj (with-current-buffer (window-buffer window)
+                      (ignore-errors (project-current)))))
     (let ((root (my-tab-bar-project-directory (project-root proj))))
       (unless (equal (alist-get 'group tab) root)
         (tab-bar-change-tab-group root)))))
@@ -485,14 +495,14 @@ in the blog's Emacs 27."
       (my-tab-bar-project-directory (project-root project)))))
 
 (defun my-tabs-tab-line-buffers ()
-  "The buffers of the current buffer's group, alphabetically.
-This is `tab-line-tabs-buffer-groups' minus its group tab: same list,
-same `tab-line-tabs-buffer-group-sort-function', but the project's name
-is not repeated above every window when the tab bar already names it."
-  (let* ((group (my-tabs-buffer-group (current-buffer)))
-         (buffers (seq-filter (lambda (buffer)
-                                (equal group (my-tabs-buffer-group buffer)))
-                              (funcall tab-line-tabs-buffer-list-function))))
+  "The tabs of the window whose tab line is being drawn, alphabetically.
+The tabs of a window are the buffers it owns (`my-tabs--owned'), so a
+tab is drawn above one window only, and the project's other buffers are
+above the windows that own them."
+  (let* ((window (selected-window))
+         (current (window-buffer window))
+         (owned (my-tabs--owned window))
+         (buffers (if (memq current owned) owned (cons current owned))))
     (if (functionp tab-line-tabs-buffer-group-sort-function)
         (seq-sort tab-line-tabs-buffer-group-sort-function buffers)
       buffers)))
@@ -581,6 +591,277 @@ front of the name."
 
 ;; `tab-line-mode' is the buffer-local mode; this is the global entry point.
 (global-tab-line-mode 1)
+
+;; ----------------------------------------------------------------------
+;; workspaces: a buffer is a tab of one window
+;; ----------------------------------------------------------------------
+
+;; A project is a workspace and its buffers are its tabs, shared out
+;; between the windows of the project's tab.  A window takes a buffer over
+;; when it displays it; the window that had it falls back to its newest
+;; remaining tab, and when it has none it gets a new ghostel terminal.  The
+;; rule is enforced after every command, and a split starts on a tab of its
+;; own instead of duplicating the buffer of the window it was split from.
+;;
+;; The frame follows a buffer the other way round: a buffer of another
+;; project moves the frame to that project's tab before it is shown, so the
+;; tab bar's chip, the tab line and the buffer always name the same
+;; project.
+
+(defvar my-tabs--reconciling nil
+  "Non-nil while the workspace rules are moving buffers between windows.")
+
+(defun my-tabs--workspace-buffer-p (buffer)
+  "Non-nil when BUFFER is a buffer a tab may show.
+Internal buffers, the ones drawn with a leading space (the minibuffer
+among them), inherit `default-directory' from whatever buffer was current
+and so would otherwise look like they belonged to that buffer's project."
+  (and (buffer-live-p buffer)
+       (not (string-prefix-p " " (buffer-name buffer)))
+       (not (eq (buffer-local-value 'major-mode buffer) 'minibuffer-mode))))
+
+(defun my-tabs--workspace (buffer)
+  "The workspace BUFFER belongs to: its project root, or nil."
+  (and (my-tabs--workspace-buffer-p buffer)
+       (my-tabs-buffer-group buffer)))
+
+(defun my-tabs--tab-workspace (&optional frame)
+  "The workspace of FRAME's current tab: the tab's group, or nil."
+  (let ((tab (assq 'current-tab (funcall tab-bar-tabs-function
+                                         (or frame (selected-frame))))))
+    (and tab (alist-get 'group tab))))
+
+(defun my-tabs--tab-windows (&optional frame)
+  "The windows of FRAME's current tab, the side windows excluded."
+  (seq-remove (lambda (window) (window-parameter window 'window-side))
+              (window-list frame 'nomini)))
+
+(defun my-tabs--owned (window)
+  "The buffers WINDOW owns, the most recently displayed first."
+  (let ((owned (window-parameter window 'my-tabs-buffers)))
+    (if owned
+        (seq-filter #'buffer-live-p owned)
+      (my-tabs--own-history window))))
+
+(defun my-tabs--own-history (window)
+  "Give WINDOW its first tab list, from the buffer it shows and its history.
+Buffers another window of the tab already owns are left to that window."
+  (let* ((workspace (or (my-tabs--workspace (window-buffer window))
+                        (my-tabs--tab-workspace (window-frame window))))
+         (taken (my-tabs--owned-by-others window))
+         (history (cons (window-buffer window)
+                        (mapcar #'car (window-prev-buffers window))))
+         (owned (seq-filter
+                 (lambda (buffer)
+                   (and (my-tabs--workspace-buffer-p buffer)
+                        (not (memq buffer taken))
+                        (equal workspace (my-tabs--workspace buffer))))
+                 (delete-dups (copy-sequence history)))))
+    (my-tabs--set-owned window owned)
+    owned))
+
+(defun my-tabs--owned-by-others (window)
+  "The buffers the other windows of WINDOW's tab own, as recorded."
+  (let (taken)
+    (dolist (other (my-tabs--tab-windows (window-frame window)))
+      (unless (eq other window)
+        (setq taken (append (window-parameter other 'my-tabs-buffers)
+                            taken))))
+    taken))
+
+(defun my-tabs--set-owned (window buffers)
+  "Record BUFFERS as the tabs of WINDOW."
+  (set-window-parameter window 'my-tabs-buffers buffers))
+
+;; Saved with the window configurations the tab bar swaps on every tab
+;; switch, so the tabs of each project's windows survive leaving and
+;; coming back to the project.
+(add-to-list 'window-persistent-parameters '(my-tabs-buffers . t))
+
+(defcustom my-tabs-new-buffer-function nil
+  "Function called with a window that has no tab left to show.
+It should display a fresh buffer in the window.  The default starts a new
+ghostel terminal, or falls back to `*scratch*' when ghostel is missing."
+  :type '(choice (const :tag "New ghostel terminal" nil)
+                 (function :tag "Function"))
+  :group 'tab-line)
+
+(defun my-tabs--new-buffer (window)
+  "Show a fresh buffer in WINDOW, which has no tab left to show."
+  (with-selected-window window
+    (cond
+     ((functionp my-tabs-new-buffer-function)
+      (funcall my-tabs-new-buffer-function window))
+     ((fboundp 'ghostel-new)
+      (ghostel-new))
+     (t
+      (switch-to-buffer (get-buffer-create "*scratch*"))))))
+
+(defun my-tabs--show-next-tab (window)
+  "Show WINDOW's newest remaining tab, or start a new terminal in it.
+Only the tabs already recorded for WINDOW count: the buffer it is
+showing has just been taken over by another window, and seeding the list
+again would hand it straight back."
+  (let ((next (seq-find #'buffer-live-p
+                        (window-parameter window 'my-tabs-buffers))))
+    (if next
+        (set-window-buffer window next)
+      (my-tabs--new-buffer window)
+      (my-tabs--set-owned window (list (window-buffer window))))))
+
+(defun my-tabs--claim (window buffer)
+  "Make BUFFER the current tab of WINDOW, taking it from the other windows.
+The window that loses BUFFER falls back to its own newest remaining tab."
+  (let ((my-tabs--reconciling t))
+    ;; Record BUFFER for WINDOW first, so that seeding the window that
+    ;; loses it cannot take the buffer back.
+    (my-tabs--set-owned window
+                        (cons buffer (delq buffer (my-tabs--owned window))))
+    (dolist (other (my-tabs--tab-windows (window-frame window)))
+      (unless (eq other window)
+        (when (memq buffer (my-tabs--owned other))
+          (my-tabs--set-owned other (delq buffer (my-tabs--owned other)))
+          (when (eq (window-buffer other) buffer)
+            (my-tabs--show-next-tab other)))))))
+
+(defun my-tabs--restore-source-tab (window)
+  "Show WINDOW one of its own tab's buffers again.
+WINDOW has just been given a buffer of another workspace, and the tab it
+belongs to is about to be left behind: a tab saved showing someone
+else's buffer would be regrouped into that other project the next time
+it is selected."
+  (let ((frame (window-frame window))
+        (previous (caar (window-prev-buffers window))))
+    (cond
+     ((and (buffer-live-p previous)
+           (equal (my-tabs--workspace previous)
+                  (my-tabs--tab-workspace frame)))
+      (set-window-buffer window previous))
+     ((seq-find #'buffer-live-p (window-parameter window 'my-tabs-buffers))
+      (my-tabs--show-next-tab window)))))
+
+(defun my-tabs--follow (workspace buffer)
+  "Switch the frame to WORKSPACE's tab and show BUFFER there."
+  (let ((my-tabs--reconciling t))
+    (my-tabs--restore-source-tab (selected-window))
+    (my-tab-bar-select-project workspace)
+    (let ((window (seq-find (lambda (window)
+                              (and (eq (window-buffer window) buffer)
+                                   (null (window-parameter
+                                          window 'window-side))))
+                            (window-list nil 'nomini))))
+      (if window
+          (select-window window)
+        (switch-to-buffer buffer)))
+    (my-tabs--claim (selected-window) buffer)))
+
+(defun my-tabs--reconcile ()
+  "Keep one buffer to one window, and the frame on the buffer's workspace.
+When the selected window shows a buffer of another project, the frame
+moves to that project's tab and shows the buffer there; a buffer another
+window of the tab already owns moves to the window that selected it."
+  (unless my-tabs--reconciling
+    (let ((window (selected-window)))
+      (when (and (windowp window)
+                 (not (window-minibuffer-p window))
+                 (null (window-parameter window 'window-side)))
+        (let* ((buffer (window-buffer window))
+               (workspace (my-tabs--workspace buffer))
+               (tab (my-tabs--tab-workspace (window-frame window))))
+          (cond
+           ((null workspace) nil)
+           ((not (equal workspace tab))
+            (my-tabs--follow workspace buffer))
+           (t (my-tabs--claim window buffer))))))))
+
+(defvar my-tabs--reconcile-state nil
+  "The window and buffer `my-tabs--reconcile' last looked at.
+Typing in a terminal sends a command per keystroke; none of them change
+the buffer of the selected window, and none of them need the rules run
+again.")
+
+(defun my-tabs--reconcile-safe ()
+  "Run `my-tabs--reconcile', reporting a failure instead of signalling it."
+  (let ((state (cons (selected-window) (window-buffer (selected-window)))))
+    (unless (equal state my-tabs--reconcile-state)
+      (setq my-tabs--reconcile-state state)
+      (with-demoted-errors "my-tabs: %S"
+        (my-tabs--reconcile)))))
+
+(add-hook 'post-command-hook #'my-tabs--reconcile-safe)
+
+(defun my-tabs--split-candidate (workspace frame)
+  "The newest buffer of WORKSPACE that no window of FRAME shows."
+  (seq-find (lambda (buffer)
+              (and (my-tabs--workspace-buffer-p buffer)
+                   (equal workspace (my-tabs--workspace buffer))
+                   (not (seq-find (lambda (window)
+                                    (eq (window-buffer window) buffer))
+                                  (window-list frame 'nomini)))))
+            (buffer-list)))
+
+(defun my-tabs--split-tab (window)
+  "Start WINDOW, a fresh split, on a tab of its own.
+The split would otherwise show the buffer of the window it was split
+from, and that tab would be current above both windows."
+  (unless (or my-tabs--reconciling
+              (window-parameter window 'window-side))
+    (let* ((shared (window-buffer window))
+           (workspace (my-tabs--workspace shared)))
+      (when workspace
+        (let ((origin (seq-find (lambda (other)
+                                  (and (not (eq other window))
+                                       (eq (window-buffer other) shared)))
+                                (my-tabs--tab-windows
+                                 (window-frame window)))))
+          ;; Pin the window the split came from first, so the new window
+          ;; cannot take the buffer they both start on.
+          (when origin
+            (my-tabs--claim origin shared))
+          (if-let* ((candidate (my-tabs--split-candidate
+                                workspace (window-frame window))))
+              (progn
+                (my-tabs--claim window candidate)
+                (set-window-buffer window candidate))
+            (my-tabs--new-buffer window)
+            (my-tabs--set-owned window (list (window-buffer window)))))))))
+
+(defun my-tabs--split (split &rest args)
+  "Call SPLIT with ARGS, then give the new window a tab of its own."
+  (let ((window (apply split args)))
+    (when (window-live-p window)
+      (my-tabs--split-tab window))
+    window))
+
+(advice-add 'split-window-below :around #'my-tabs--split)
+(advice-add 'split-window-right :around #'my-tabs--split)
+
+(defun my-tabs-close-tab (tab)
+  "Take TAB out of the tab line of the window being drawn.
+The buffer stays open as an unowned tab of the project, ready for the
+next window that needs one; the window falls back to its newest
+remaining tab, or to a new terminal, when TAB was the one it showed."
+  (let* ((buffer (if (bufferp tab) tab (cdr (assq 'buffer tab))))
+         (window (selected-window)))
+    (when (buffer-live-p buffer)
+      (my-tabs--set-owned window (delq buffer (my-tabs--owned window)))
+      (when (eq buffer (window-buffer window))
+        (my-tabs--show-next-tab window))
+      (tab-line-force-update t))))
+
+(setq tab-line-close-tab-function #'my-tabs-close-tab)
+
+(defun my-tabs--forget-killed-buffer ()
+  "Drop the buffer being killed from the tabs of every window."
+  (let ((buffer (current-buffer)))
+    (dolist (frame (frame-list))
+      (dolist (window (window-list frame 'nomini))
+        (when (memq buffer (window-parameter window 'my-tabs-buffers))
+          (my-tabs--set-owned
+           window
+           (delq buffer (window-parameter window 'my-tabs-buffers))))))))
+
+(add-hook 'kill-buffer-hook #'my-tabs--forget-killed-buffer)
 
 ;; ----------------------------------------------------------------------
 ;; following the theme
