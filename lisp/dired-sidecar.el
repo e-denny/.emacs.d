@@ -492,13 +492,19 @@ pi sidecar's `display-buffer' -- or any other -- from taking the window for
 its own buffer.  `--show' drops that mark when it has to put another
 project's listing in it, because `set-window-buffer' refuses a dedicated
 window; a tab that restores the window with the listing it saved is why
-that is needed and not just a precaution."
+that is needed and not just a precaution.
+
+The width is preserved for the same reason the pi sidecar's is: a session
+restores windows while the frame is still at its start-up size, and the
+frame's own resizing routine sizes every window proportionally, so an
+unpreserved column comes back much wider than it was saved."
   (let ((window (display-buffer
                  buffer
                  `((display-buffer-in-side-window)
                    (side . left)
                    (slot . 0)
                    (window-width . ,(dired-sidecar--requested-width))
+                   (preserve-size t)
                    ,@(when-let* ((height (dired-sidecar--requested-height)))
                        `((window-height . ,height)))))))
     (when (window-live-p window)
@@ -557,6 +563,17 @@ group, the project of the selected window's buffer, or that buffer's own
                              default-directory))))))
       (dired-sidecar--directory directory))))
 
+(defun dired-sidecar--preserve-width (&optional window)
+  "Keep WINDOW's width when the frame is resized.
+A session restores the column while the frame is still at its start-up
+size, and the frame's own resizing routine (`window--resize-root-window')
+then sizes every window proportionally; an unpreserved column comes back
+much wider than it was saved.  Resizing the window by hand clears this."
+  (let ((window (or window (dired-sidecar--window))))
+    (when (window-live-p window)
+      (window-preserve-size window t t))
+    window))
+
 (defun dired-sidecar--show (&rest _)
   "Show the listing of the current workspace's project root.
 A sidecar window is reused -- the one the tab restored, with its size --
@@ -568,6 +585,7 @@ along."
       (cond
        ((and window (eq (window-buffer window) buffer)
              (dired-sidecar--in-place-p window))
+        (dired-sidecar--preserve-width window)
         nil)
        ((and window (not (dired-sidecar--in-place-p window))
              (dired-sidecar--movable-p window))

@@ -970,16 +970,31 @@ had the window to itself, so its dedication is dropped first."
       (set-window-buffer window buffer))
     (my-tabs--set-owned window (list buffer))))
 
+(defun my-tabs--panel-movable-p (window)
+  "Non-nil when a panel showing in WINDOW can be moved by its own package.
+Only the frame's main window is off limits: it is the one place a
+workspace buffer can go, so a panel that took it over has to be reseeded
+here.  Any other window belongs to `dired-sidecar--show' or
+`pi-sidecar--restore-window', which delete it and display the panel in
+the left column again -- reseeding it first would leave the window
+behind as an ordinary one showing some other workspace buffer (which is
+how a stray `pi-subagents.el' window appeared after a restart)."
+  (and (window-parent window)
+       (not (eq window (window-main-window (window-frame window))))))
+
 (defun my-tabs--restore-main-windows (&rest _)
   "Put the frame's main windows back in the shape a tab expects.
 A main-area window showing a side panel -- the directory listing or the
 agent panel, which a restored tab can leave there -- gets a workspace
-buffer again.  A frame with nothing but side windows gets a main window
-split off, since the panels cannot be the only thing on it."
+buffer again, but only when no panel package can move it itself; a panel
+in any other window is the panel package's to take back.  A frame with
+nothing but side windows gets a main window split off, since the panels
+cannot be the only thing on it."
   (let ((windows (window-list nil 'nomini)))
     (dolist (window windows)
       (unless (window-parameter window 'window-side)
-        (when (my-tabs--side-panel-buffer-p (window-buffer window))
+        (when (and (my-tabs--side-panel-buffer-p (window-buffer window))
+                   (not (my-tabs--panel-movable-p window)))
           (my-tabs--reseed window))))
     (unless (seq-some (lambda (window)
                         (null (window-parameter window 'window-side)))

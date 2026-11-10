@@ -1092,7 +1092,11 @@ the cursor replacement for moving between rows, not an inactive marker."
 ;;;; Display
 
 (defun pi-sidecar--display (buffer)
-  "Display BUFFER in the left side window below the dired listing."
+  "Display BUFFER in the left side window below the dired listing.
+The width is preserved, so the frame growing back to its saved size does
+not stretch the column: a session's windows are restored while the frame
+is still at its start-up size, and the frame's own resizing routine
+(`window--resize-root-window') sizes every window proportionally."
   (let* ((width (pi-sidecar--requested-width))
          (window (display-buffer
                   buffer
@@ -1100,6 +1104,7 @@ the cursor replacement for moving between rows, not an inactive marker."
                     (side . left)
                     (slot . 1)
                     (window-width . ,width)
+                    (preserve-size t)
                     (window-height . ,pi-sidecar-height)))))
     (when (window-live-p window)
       (unless (eq (window-buffer window) buffer)
@@ -1149,6 +1154,17 @@ it before this package's hooks run."
               (mapcan (lambda (frame) (window-list frame 'nomini))
                       (frame-list))))
 
+(defun pi-sidecar--preserve-width (&optional window)
+  "Keep WINDOW's width when the frame is resized.
+A session restores the column while the frame is still at its start-up
+size, and the frame's own resizing routine (`window--resize-root-window')
+then sizes every window proportionally; an unpreserved column comes back
+much wider than it was saved.  Resizing the window by hand clears this."
+  (let ((window (or window (pi-sidecar--window))))
+    (when (window-live-p window)
+      (window-preserve-size window t t))
+    window))
+
 (defun pi-sidecar--follow-tab (&rest _)
   "Put the sidecar into the current workspace, or take it out of it.
 Run from the tab bar's hooks, so the agent list is there in every tab the
@@ -1166,6 +1182,7 @@ would otherwise bring back what `C-c P' has just closed."
         (progn
           (unless (pi-sidecar--in-place-p window)
             (pi-sidecar--restore-window window))
+          (pi-sidecar--preserve-width (and (window-live-p window) window))
           (pi-sidecar--start-timer)
           (pi-sidecar--install-hooks))
       (pi-sidecar-open))))
