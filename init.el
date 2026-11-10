@@ -952,11 +952,29 @@ on `kill-emacs-query-functions'."
 ;; capture and `C-c l' stores a link; the other single-letter `C-c' keys taken
 ;; in this file are `C-c t' (theme), `C-c T' (dired sidecar) and `C-c g'
 ;; (ghostel).
+;;
+;; ALT+arrows are window navigation everywhere but in Org, whose
+;; `org-mode-map' binds them to structure editing: `org-metaleft' and
+;; `org-metaright' promote and demote the heading at point, `org-metaup' and
+;; `org-metadown' move a subtree (or a table row, or a list item) past its
+;; neighbours.  Neither has another default key, so rather than lose them the
+;; Org map gives the arrows up: they are the window moves here too, and the
+;; structure commands move to the same arrows under `C-c', which Org leaves
+;; unbound.
 (use-package org
   :ensure nil
   :bind (("C-c a" . org-agenda)
          ("C-c c" . org-capture)
-         ("C-c l" . org-store-link)))
+         ("C-c l" . org-store-link)
+         :map org-mode-map
+         ("M-<left>" . windmove-left)
+         ("M-<right>" . windmove-right)
+         ("M-<up>" . windmove-up)
+         ("M-<down>" . windmove-down)
+         ("C-c <left>" . org-metaleft)
+         ("C-c <right>" . org-metaright)
+         ("C-c <up>" . org-metaup)
+         ("C-c <down>" . org-metadown)))
 
 ;; LaTeX previews.
 ;;
