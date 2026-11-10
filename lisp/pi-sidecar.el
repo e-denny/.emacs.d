@@ -1154,15 +1154,32 @@ it before this package's hooks run."
               (mapcan (lambda (frame) (window-list frame 'nomini))
                       (frame-list))))
 
-(defun pi-sidecar--preserve-width (&optional window)
-  "Keep WINDOW's width when the frame is resized.
-A session restores the column while the frame is still at its start-up
-size, and the frame's own resizing routine (`window--resize-root-window')
-then sizes every window proportionally; an unpreserved column comes back
-much wider than it was saved.  Resizing the window by hand clears this."
-  (let ((window (or window (pi-sidecar--window))))
+(defun pi-sidecar--fit-width (&optional window)
+  "Give the left column the width the panels ask for, and keep it.
+A session puts its window states back while the frame is still at its
+start-up size -- 140 columns wide here, not the 282 it is saved at -- so
+the saved pixel width does not fit and `window-state-put' falls back to
+the state's normalized fraction, which puts this column at 17 columns
+instead of the 35 asked for.  The frame then grows to its saved size, and
+`window--resize-root-window' hands every window its share
+proportionally, which either stretches the 17 to 34 or, with the width
+preserved, leaves the column at 17.  So the width is set to the requested
+one here and then preserved; resizing the column by hand clears the
+preserved size and the next follow puts it back."
+  (let ((window (or window (pi-sidecar--window)))
+        (width (pi-sidecar--requested-width)))
     (when (window-live-p window)
-      (window-preserve-size window t t))
+      (let ((delta (- width (window-total-width window))))
+        (when (/= delta 0)
+          (ignore-errors (window-resize window delta t 'safe))))
+      ;; Both windows of the column share its width, and one of them may have
+      ;; recorded the width it happened to have when it was created; a later
+      ;; frame resize would then try to honour two different sizes.  Record the
+      ;; column's width for every window on this side.
+      (dolist (other (window-list (window-frame window) 'nomini))
+        (when (eq (window-parameter other 'window-side)
+                  (window-parameter window 'window-side))
+          (window-preserve-size other t t))))
     window))
 
 (defun pi-sidecar--follow-tab (&rest _)
@@ -1182,7 +1199,7 @@ would otherwise bring back what `C-c P' has just closed."
         (progn
           (unless (pi-sidecar--in-place-p window)
             (pi-sidecar--restore-window window))
-          (pi-sidecar--preserve-width (and (window-live-p window) window))
+          (pi-sidecar--fit-width (and (window-live-p window) window))
           (pi-sidecar--start-timer)
           (pi-sidecar--install-hooks))
       (pi-sidecar-open))))

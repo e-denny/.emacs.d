@@ -494,10 +494,11 @@ project's listing in it, because `set-window-buffer' refuses a dedicated
 window; a tab that restores the window with the listing it saved is why
 that is needed and not just a precaution.
 
-The width is preserved for the same reason the pi sidecar's is: a session
-restores windows while the frame is still at its start-up size, and the
-frame's own resizing routine sizes every window proportionally, so an
-unpreserved column comes back much wider than it was saved."
+The width is set to the requested one and preserved for the same reason
+the pi sidecar does it: a session restores windows while the frame is
+still at its start-up size, so the saved width is replaced by the state's
+normalized fraction and the growing frame then either stretches it or,
+preserved, leaves it too narrow."
   (let ((window (display-buffer
                  buffer
                  `((display-buffer-in-side-window)
@@ -563,15 +564,32 @@ group, the project of the selected window's buffer, or that buffer's own
                              default-directory))))))
       (dired-sidecar--directory directory))))
 
-(defun dired-sidecar--preserve-width (&optional window)
-  "Keep WINDOW's width when the frame is resized.
-A session restores the column while the frame is still at its start-up
-size, and the frame's own resizing routine (`window--resize-root-window')
-then sizes every window proportionally; an unpreserved column comes back
-much wider than it was saved.  Resizing the window by hand clears this."
-  (let ((window (or window (dired-sidecar--window))))
+(defun dired-sidecar--fit-width (&optional window)
+  "Give the left column the width the panels ask for, and keep it.
+A session puts its window states back while the frame is still at its
+start-up size -- 140 columns wide here, not the 282 it is saved at -- so
+the saved pixel width does not fit and `window-state-put' falls back to
+the state's normalized fraction, which puts this column at 17 columns
+instead of the 35 asked for.  The frame then grows to its saved size, and
+`window--resize-root-window' hands every window its share
+proportionally, which either stretches the 17 to 34 or, with the width
+preserved, leaves the column at 17.  So the width is set to the requested
+one here and then preserved; resizing the column by hand clears the
+preserved size and the next follow puts it back."
+  (let ((window (or window (dired-sidecar--window)))
+        (width (dired-sidecar--requested-width)))
     (when (window-live-p window)
-      (window-preserve-size window t t))
+      (let ((delta (- width (window-total-width window))))
+        (when (/= delta 0)
+          (ignore-errors (window-resize window delta t 'safe))))
+      ;; Both windows of the column share its width, and one of them may have
+      ;; recorded the width it happened to have when it was created; a later
+      ;; frame resize would then try to honour two different sizes.  Record the
+      ;; column's width for every window on this side.
+      (dolist (other (window-list (window-frame window) 'nomini))
+        (when (eq (window-parameter other 'window-side)
+                  (window-parameter window 'window-side))
+          (window-preserve-size other t t))))
     window))
 
 (defun dired-sidecar--show (&rest _)
@@ -585,7 +603,7 @@ along."
       (cond
        ((and window (eq (window-buffer window) buffer)
              (dired-sidecar--in-place-p window))
-        (dired-sidecar--preserve-width window)
+        (dired-sidecar--fit-width window)
         nil)
        ((and window (not (dired-sidecar--in-place-p window))
              (dired-sidecar--movable-p window))
