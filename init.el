@@ -16,6 +16,53 @@
 
 (package-initialize)
 
+;; Org on top of the bundled copy.
+;;
+;; The LaTeX preview rewrite (`org-latex-preview-mode', the "olp" work by
+;; Karthik Chikmagalur and Tecosaur) ships in Org 10.0-pre, not in the 9.8
+;; bundled with Emacs 32.  GNU-devel ELPA publishes it as the `org' package;
+;; installing it puts its directory at the front of `load-path', ahead of the
+;; bundled lisp/org, so `(require 'org)' gets 10.0-pre and every org-*.elc
+;; agrees on the version (`org-assert-version') instead of mixing trees.  The
+;; devel archive is added only around the install: left in `package-archives'
+;; permanently it would offer development builds of every package, and
+;; `package-upgrade-all' would take them.
+;;
+;; `dont-select' keeps `package-install' from rewriting
+;; `package-selected-packages' behind Custom's back; `org' is listed in the
+;; saved value at the end of this file instead.  The archive *descriptor* is
+;; passed rather than the symbol: `(package-installed-p 'org)' is t for the
+;; bundled copy, so `package-install' would refuse the symbol as "already
+;; installed" -- the descriptor names the 10.0-pre build explicitly.  After
+;; that, `M-x my/org-devel-upgrade' installs a newer GNU-devel build.
+(defun my/org-devel-upgrade ()
+  "Install Org from GNU-devel ELPA, or upgrade it to the latest build."
+  (interactive)
+  (let ((package-archives
+         (cons '("gnu-devel" . "https://elpa.gnu.org/devel/")
+               package-archives)))
+    (package-refresh-contents)
+    (let* ((latest (cadr (assq 'org package-archive-contents)))
+           (installed (package-get-descriptor 'org 'installed)))
+      (cond
+       ((and installed
+             (not (version-list-< (package-desc-version installed)
+                                 (package-desc-version latest))))
+        (message "Org is up to date (%s)"
+                 (package-version-join (package-desc-version installed))))
+       (installed (package-upgrade 'org))
+       (t (package-install latest 'dont-select))))))
+
+(unless (package-installed-p 'org '(10 0 -1))
+  (condition-case err
+      (my/org-devel-upgrade)
+    (error (warn "Org 10 not installed from GNU-devel: %s" err))))
+
+;; Load it now, before anything else can pull a library out of the bundled
+;; tree: two Org versions in one session is the mixed install that
+;; `org-assert-version' reports.
+(require 'org)
+
 (unless (package-installed-p 'use-package)
   (package-refresh-contents)
   (package-install 'use-package))
@@ -806,6 +853,11 @@ on `kill-emacs-query-functions'."
 (setq org-startup-folded nil
       org-hide-emphasis-markers t          ; */_/= simplified in the buffer
       org-pretty-entities t                ; \alpha -> α
+      ;; Render a file's existing LaTeX fragments when it opens.  The preview
+      ;; minor mode below only tracks fragments you insert or edit and hides
+      ;; or shows previews already overlaying the buffer, so without this a
+      ;; freshly opened file stays source until `C-c C-x C-l'.
+      org-startup-with-latex-preview t
       org-ellipsis " …"                    ; marker on a folded heading
       org-catch-invisible-edits 'show-and-error
       org-special-ctrl-a/e t               ; `C-a' first on the stars, then the line
@@ -906,6 +958,24 @@ on `kill-emacs-query-functions'."
          ("C-c c" . org-capture)
          ("C-c l" . org-store-link)))
 
+;; LaTeX previews.
+;;
+;; `org-latex-preview-mode' is the new preview system: fragments are rendered
+;; asynchronously with dvisvgm (the default `org-latex-preview-process-default')
+;; and cached on disk, the images take their colours from the surrounding
+;; text and follow theme changes, and the image is swapped back to source
+;; while point is inside the fragment.  It works together with
+;; `org-startup-with-latex-preview' above: the startup flag renders every
+;; fragment in the file, the mode then keeps them current as you edit.  The
+;; mode is buffer-local and its autoload only exists once the package's
+;; autoloads are loaded, so the library is required here and the hook is safe
+;; on the first Org buffer.
+;; `C-c C-x C-l' (`org-latex-preview') stays the bulk toggle: the redefined
+;; command in this library keeps the old key.  Live previews while typing are
+;; `org-latex-preview-mode-display-live', defaulting to block math only.
+(when (require 'org-latex-preview nil t)
+  (add-hook 'org-mode-hook #'org-latex-preview-mode))
+
 ;; Soft wrap at 100 columns.
 ;;
 ;; A fixed measure rather than the window width: `visual-fill-column-mode'
@@ -982,7 +1052,7 @@ on `kill-emacs-query-functions'."
 	doom-themes easysession ef-themes embark embark-consult
 	ghostel git helpful indent-bars magit marginalia markdown-mode
 	markdown-toc nerd-icons nerd-icons-corfu nerd-icons-dired
-	nerd-icons-ibuffer org-appear org-modern outline-indent pilish
+	nerd-icons-ibuffer org org-appear org-modern outline-indent pilish
 	rainbow-delimiters vertico with-editor)))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
