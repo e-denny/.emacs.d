@@ -1008,8 +1008,8 @@ on `kill-emacs-query-functions'."
 
 ;; Org itself is built in, hence `:ensure nil'. `C-c a' is the agenda, `C-c c'
 ;; capture and `C-c l' stores a link; the other single-letter `C-c' keys taken
-;; in this file are `C-c t' (theme), `C-c T' (dired sidecar) and `C-c g'
-;; (ghostel).
+;; in this file are `C-c t' (theme), `C-c T' (dired sidecar), `C-c e' (mail)
+;; and `C-c g' (ghostel).
 ;;
 ;; ALT+arrows are window navigation everywhere but in Org, whose
 ;; `org-mode-map' binds them to structure editing: `org-metaleft' and
@@ -1095,6 +1095,173 @@ on `kill-emacs-query-functions'."
   (org-appear-autolinks t)
   (org-appear-autosubmarkers t)
   (org-appear-autoentities t))
+
+;; ----------------------------------------------------------------------
+;; mail: mu4e, mbsync and org-msg
+;; ----------------------------------------------------------------------
+
+;; Reading mail is two programs behind one buffer, with two more on the
+;; outside: mbsync copies the Gmail mailboxes into a local Maildir over IMAP,
+;; mu indexes that Maildir, and mu4e is the Emacs front end to the index.
+;; Sending goes out through msmtp.  The outside half of it lives in files this
+;; one only points at:
+;;
+;;   ~/.mbsyncrc        Gmail IMAP account, one channel per folder, and the
+;;                      app password.  Every folder mbsync brings in is a
+;;                      maildir under ~/Mail/gmail.
+;;   ~/.msmtprc         Gmail submission through msmtp, same app password.
+;;
+;; `mu4e-get-mail-command' is what ties it together: mu4e runs `mbsync -a'
+;; (often enough that `mu4e-update-interval' below matters), then hands the
+;; changed Maildir to mu, which reindexes it and tells the views.
+;;
+;; The one mu4e setting Gmail cannot do without is
+;; `mu4e-change-filenames-when-moving': mu4e records a flag change by
+;; renaming the maildir file, and mbsync identifies a message by its name, so
+;; without the rename mbsync would take the flagged message for a new one and
+;; download the original back.
+
+;; mu4e ships inside mu, not as an Emacs package, and the AUR build
+;; (`yay -S mu', the binary is /usr/bin/mu) drops its lisp here.  The block
+;; below is skipped when the directory is missing, so a machine without mu
+;; still starts Emacs -- only the mail commands are absent.
+(add-to-list 'load-path "/usr/share/emacs/site-lisp/mu4e")
+
+;; Everything mail-related hangs off this one `when', closed after the icons
+;; at the end of the section: without mu there is no `mu4e-compose-mode-hook'
+;; for org-msg to hook, and no folders for the settings below to name.
+(when (require 'mu4e nil t)
+
+  ;; `mbsync -a' is what actually fetches; mu4e runs it, then reindexes.
+  (setq mu4e-get-mail-command "mbsync -a"
+        ;; Pull every five minutes, in the background, and reindex after
+        ;; every pull.  A Gmail account with All Mail synced makes the first
+        ;; sync the slow one; after that it is a few seconds.
+        mu4e-update-interval 300
+        mu4e-index-update-in-background t
+        mu4e-change-filenames-when-moving t
+        ;; The config's rule for exits and processes (see "quitting" above):
+        ;; nothing about mail is worth a confirmation.
+        mu4e-confirm-quit nil
+        ;; vertico reads the prompts mu4e makes for folders, senders and
+        ;; addresses; its own default is ido.
+        mu4e-completing-read-function #'completing-read
+        ;; All Mail duplicates the inbox and sent mail on disk.  Skipping
+        ;; duplicates by Message-Id keeps one hit per message in searches;
+        ;; the limit is off so a maildir query is not silently cut at 500.
+        mu4e-search-skip-duplicates t
+        mu4e-search-results-limit -1
+        ;; Folders, relative to the root maildir.
+        mu4e-drafts-folder "/Drafts"
+        mu4e-sent-folder "/Sent"
+        mu4e-trash-folder "/Trash"
+        ;; Refiling to All Mail is how mu4e's manual archives on Gmail: mbsync
+        ;; takes the file out of INBOX, which is what removes Gmail's Inbox
+        ;; label, and files it under All Mail.  All Mail is synced here, so
+        ;; whatever copy this leaves behind is on disk rather than lost, and
+        ;; `mu4e-search-skip-duplicates' keeps it out of the search results.
+        mu4e-refile-folder "/All Mail"
+        ;; Gmail keeps its own copy of what you send, so mu4e must not save a
+        ;; second one -- that is exactly the duplicate this setting avoids.
+        mu4e-sent-messages-behavior 'delete
+        ;; Headers and message one after the other in the same window: the
+        ;; workspace rules in lisp/my-tabs.el give every window one buffer,
+        ;; and a split view would either fight them or start a terminal in the
+        ;; half mu4e wanted for the message.
+        mu4e-split-view 'single-window
+        mu4e-headers-date-format "%Y-%m-%d %H:%M"
+        mu4e-attachment-dir "~/Downloads"
+        ;; Keys for the maildir shortcuts in the main view.
+        mu4e-maildir-shortcuts
+        '((:maildir "/INBOX" :key ?i)
+          (:maildir "/All Mail" :key ?a)
+          (:maildir "/Sent" :key ?s)
+          (:maildir "/Drafts" :key ?d)
+          (:maildir "/Trash" :key ?t))
+        ;; Who we are, and where replies are sent from.
+        user-mail-address "edgar1denny@gmail.com"
+        user-full-name "Edgar Denny"
+        ;; Sending: msmtp, called the way sendmail is, with `-t' so it reads
+        ;; the recipients from the headers.  Nothing blocks while it runs.
+        sendmail-program "msmtp"
+        send-mail-function #'sendmail-send-it
+        message-send-mail-function #'message-send-mail-with-sendmail
+        message-kill-buffer-on-exit t)
+
+  ;; The inbox gets a bookmark of its own and is the one the modeline counts,
+  ;; since "unread" would otherwise count All Mail's copies too.
+  (add-to-list 'mu4e-bookmarks
+               '(:name "Inbox"
+                 :query "maildir:/INBOX AND flag:unread"
+                 :key ?i
+                 :favorite t)
+               t)
+
+  ;; org-msg, which composes and replies in Org and exports the HTML that the
+  ;; other end expects.  It is a global minor mode: switching it on installs
+  ;; `org-msg-post-setup' on `mu4e-compose-mode-hook' -- for mu4e it hooks
+  ;; nothing else -- and it decides which functions to hook by reading
+  ;; `mail-user-agent', so that has to name mu4e first.  `:after mu4e' keeps
+  ;; the order when mu is not installed and the `when' above did nothing.
+  (use-package org-msg
+    :ensure t
+    :after mu4e
+    :init
+    (setq mail-user-agent 'mu4e-user-agent)
+    ;; htmlize, which org-msg uses to color the exported HTML, comes in as a
+    ;; dependency.  Plain `setq' rather than `:custom', for the reason given
+    ;; under magit above.
+    (setq org-msg-options "html-postamble:nil H:5 num:nil ^:{} toc:nil author:nil email:nil\\n:t")
+    ;; No `hidestars indent' startup flags: org-modern draws this config's Org
+    ;; buffers, and `org-msg-edit-mode' derives from `org-mode', so the compose
+    ;; buffer already looks like the rest of Org here.
+    (setq org-msg-startup nil)
+    ;; Greet the person being replied to by first name, the Outlook way.  `%s'
+    ;; becomes " Mark" or nothing when there is no name to use.
+    (setq org-msg-greeting-fmt "\nHi%s,\n\n")
+    (setq org-msg-greeting-name-limit 1)
+    ;; New mail and replies to HTML mail go out as both a plain-text and an
+    ;; HTML part; a reply to a plain-text message stays plain text, so mailing
+    ;; lists keep getting text.
+    (setq org-msg-default-alternatives '((new . (text html))
+                                         (reply-to-html . (text html))
+                                         (reply-to-text . (text))))
+    (setq org-msg-convert-citation t)
+    :config
+    (org-msg-mode 1))
+
+  ;; The mail windows are windows of one workspace: the `~/email' chip in the
+  ;; tab bar.  mu4e's buffers carry no file of their own, so lisp/my-tabs.el
+  ;; files them under the workspace whose tab they are shown in -- which is
+  ;; why mu4e is entered by way of the workspace rather than from wherever
+  ;; point happens to be.  `my-tab-bar-select-project' makes the tab when it
+  ;; does not exist yet, so this is also the first-run command.
+  (defun my-mail ()
+    "Start mu4e in the email workspace.
+The frame switches to that workspace's tab first, so the main, headers,
+article and compose buffers are all tabs of the email workspace instead of
+tabs of whichever project the frame was showing."
+    (interactive)
+    (my-tab-bar-select-project (expand-file-name "~/email"))
+    (mu4e))
+
+  ;; The tab line draws a file-type icon per tab, and mu4e's buffers are in
+  ;; modes `nerd-icons' knows nothing about, so they would all wear the Emacs
+  ;; logo that stands in for `fundamental-mode' -- the same gap ghostel had.
+  ;; `nerd-icons-icon-for-mode' walks a mode's parents, so `org-msg-edit-mode'
+  ;; (derived from `org-mode') and `mu4e-view-mode' (from
+  ;; `gnus-article-mode') keep their own icons.
+  (dolist (icon '((mu4e-main-mode nerd-icons-mdicon "nf-md-email_outline"
+                     :face nerd-icons-lblue)
+                  (mu4e-headers-mode nerd-icons-mdicon "nf-md-inbox"
+                     :face nerd-icons-lblue)
+                  (mu4e-view-mode nerd-icons-mdicon "nf-md-email_open_outline"
+                     :face nerd-icons-lorange)
+                  (mu4e-compose-mode nerd-icons-mdicon "nf-md-email_edit_outline"
+                     :face nerd-icons-lyellow)))
+    (add-to-list 'nerd-icons-mode-icon-alist icon))
+
+  (global-set-key (kbd "C-c e") #'my-mail))
 
 ;; ----------------------------------------------------------------------
 ;; pilish -- Emacs frontend for the pi coding agent
