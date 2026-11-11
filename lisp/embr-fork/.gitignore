@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+*.elc
+blocklist.txt
+reports/
+native/*.so
+.codex

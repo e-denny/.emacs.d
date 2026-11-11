@@ -677,6 +677,64 @@ enabled, and the older one's faces show through where the newer has none."
 (global-set-key (kbd "C-c T") #'dired-sidecar-toggle)
 
 ;; ----------------------------------------------------------------------
+;; browser: embr
+;; ----------------------------------------------------------------------
+
+;; embr -- Emacs as the display server: a headless Chromium renders the page,
+;; streams frames over CDP screencast into an image in the buffer, and passes
+;; every key and click back to it, so typing, arrows and TAB behave as in a
+;; browser while C-x/M-x stay Emacs'.  Frames go through the native canvas
+;; path: Emacs 32 can hand a C module the pixel buffer of a canvas image, and
+;; lisp/embr-fork/native/embr-canvas.so -- built once here with
+;; `make -C native', it needs libjpeg-turbo's headers, already pulled in by
+;; the chromium package -- writes decoded JPEG straight into it.  The older
+;; path writes a JPEG per frame and is a third slower on input latency.
+;;
+;; The package is not on MELPA, and this is a *fork*, not a submodule:
+;; lisp/embr-fork holds ordinary files forked from embr.el at commit 2b6725d,
+;; so local changes are just edits (see UPSTREAM.md there) with no patch
+;; file to reapply and no `git submodule update' to conflict with.  The
+;; Python daemon (embr.py) and the C module sit next to embr.el, so it is
+;; `:load-path' plus no `:ensure' rather than a package-install.
+;;
+;; Engine: Arch's own chromium package, named by
+;; `embr-chromium-executable'.  Upstream drives it through Playwright and
+;; would instead want either the CloakBrowser default (closed-source patched
+;; Chromium, shipped to defeat bot detection) or Playwright's own private
+;; Chromium build (~170MB into ~/.cache/ms-playwright).  The fork drops
+;; Playwright: embr.py speaks CDP to `chromium --headless=new
+;; --remote-debugging-pipe' over fds 3/4 with nothing but the Python standard
+;; library, so there is no venv, no playwright package and no browser
+;; download -- the daemon is `python3 embr.py'.  The ad blocklist (78K
+;; domains from StevenBlack/hosts, filtered before they reach the network) is
+;; ~/.local/share/embr/blocklist.txt.
+;;
+;; `embr-hover-rate' is the README's recommendation for the canvas backend
+;; (30 is for the JPEG one).  Plain `setq' rather than `:custom' throughout,
+;; for the reason given under magit.  Uncomment the `browse-url' line to make
+;; embr the browser for every link in Emacs, org and help included.
+(use-package embr
+  :load-path "lisp/embr-fork"
+  :defer t
+  :bind (("C-c b" . embr-browse))
+  :init
+  (setq embr-chromium-executable "/usr/bin/chromium"
+        ;; Viewport follows the Emacs window; the screen dimensions reported
+        ;; to sites are the real ones, read back once at startup.
+        embr-viewport-sizing 'dynamic
+        embr-screen-width (or (display-pixel-width) 1920)
+        embr-screen-height (or (display-pixel-height) 1080)
+        embr-color-scheme 'dark
+        embr-hover-rate 60
+        embr-scroll-method 'instant
+        embr-scroll-step 100
+        embr-tab-bar t
+        embr-session-restore t
+        embr-home-url "about:blank"
+        ;; browse-url-browser-function 'embr-browse
+        ))
+
+;; ----------------------------------------------------------------------
 ;; quitting: no questions
 ;; ----------------------------------------------------------------------
 
