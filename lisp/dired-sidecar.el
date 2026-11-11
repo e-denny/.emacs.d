@@ -98,9 +98,29 @@ brings them back."
   :type 'boolean
   :group 'dired-sidecar)
 
+(defcustom dired-sidecar-substitutes nil
+  "Alist of (DIRECTORY . FUNCTION) that take the sidecar window over.
+For a workspace rooted at DIRECTORY, FUNCTION is called with no arguments
+when the sidecar is shown, and the buffer it returns is displayed in the
+sidecar window instead of the Dired listing of that directory -- the mu4e
+main view in a mail workspace, say, where a listing of an otherwise empty
+directory would be of no use.  Returning nil, or a dead buffer, keeps the
+listing.
+
+DIRECTORY is compared with the workspace root the way this package spells
+it: absolute, without a trailing slash."
+  :type '(alist :key-type directory :value-type function)
+  :group 'dired-sidecar)
+
 (defvar-local dired-sidecar-root nil
   "Project root this Dired listing belongs to.
 Nil in every buffer this package does not own.")
+
+(defvar-local dired-sidecar-substitute-root nil
+  "Workspace root a substitute buffer stands in for, or nil.
+Set in the buffers `dired-sidecar-substitutes' puts in the sidecar window,
+so that window keeps being found on the next tab switch and is not asked
+for git bars.")
 
 (defvar-local dired-sidecar--ready nil
   "Non-nil once the current sidecar buffer has its keys and looks.")
@@ -518,10 +538,31 @@ preserved, leaves it too narrow."
         (set-window-dedicated-p window buffer)))
     window))
 
+(defun dired-sidecar--panel-buffer (root)
+  "Return the buffer to show in the sidecar window of workspace ROOT.
+That is the Dired listing of ROOT, unless `dired-sidecar-substitutes'
+names a function for ROOT and the function returns a live buffer.  The
+substitute is marked with `dired-sidecar-substitute-root' on the way out."
+  (or (when-let* ((function (cdr (assoc (dired-sidecar--directory root)
+                                        dired-sidecar-substitutes))))
+        (let ((buffer (condition-case error
+                          (funcall function)
+                        (error
+                         (message "dired-sidecar: substitute for %s: %S"
+                                  root error)
+                         nil))))
+          (when (buffer-live-p buffer)
+            (with-current-buffer buffer
+              (setq-local dired-sidecar-substitute-root
+                          (dired-sidecar--directory root)))
+            buffer)))
+      (dired-sidecar--buffer root)))
+
 (defun dired-sidecar--window (&optional frame)
   "Return FRAME's dired sidecar window, or nil."
   (seq-find (lambda (window)
-              (buffer-local-value 'dired-sidecar-root (window-buffer window)))
+              (with-current-buffer (window-buffer window)
+                (or dired-sidecar-root dired-sidecar-substitute-root)))
             (window-list frame 'nomini)))
 
 (defun dired-sidecar--in-place-p (window)
@@ -596,9 +637,11 @@ preserved size and the next follow puts it back."
   "Show the listing of the current workspace's project root.
 A sidecar window is reused -- the one the tab restored, with its size --
 and its buffer replaced when the tab brought another project's listing
-along."
+along.  A workspace with an entry in `dired-sidecar-substitutes' gets what
+that entry returns in the window instead, the listing staying as the
+fallback when it returns no live buffer."
   (when-let* ((root (dired-sidecar--workspace-root))
-              (buffer (dired-sidecar--buffer root)))
+              (buffer (dired-sidecar--panel-buffer root)))
     (let ((window (dired-sidecar--window)))
       (cond
        ((and window (eq (window-buffer window) buffer)
@@ -624,8 +667,10 @@ along."
         (set-window-dedicated-p window buffer))
        (t (dired-sidecar--display buffer))))
     ;; The listing that is now on screen may have been read before the
-    ;; repository moved on, so its bars are re-checked here.
-    (dired-sidecar--git-refresh)))
+    ;; repository moved on, so its bars are re-checked here.  A substitute
+    ;; has no listing and no bars.
+    (unless (buffer-local-value 'dired-sidecar-substitute-root buffer)
+      (dired-sidecar--git-refresh))))
 
 (defvar dired-sidecar--hidden nil
   "Non-nil when the listing was closed on purpose.

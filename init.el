@@ -1164,11 +1164,13 @@ on `kill-emacs-query-functions'."
         ;; Gmail keeps its own copy of what you send, so mu4e must not save a
         ;; second one -- that is exactly the duplicate this setting avoids.
         mu4e-sent-messages-behavior 'delete
-        ;; Headers and message one after the other in the same window: the
-        ;; workspace rules in lisp/my-tabs.el give every window one buffer,
-        ;; and a split view would either fight them or start a terminal in the
-        ;; half mu4e wanted for the message.
-        mu4e-split-view 'single-window
+        ;; Headers on the left, the message on the right, both in this frame:
+        ;; the folder view takes the frame's top left side window (see
+        ;; `dired-sidecar-substitutes' below), so the three panes are the side
+        ;; column, the headers and the article.  `display-buffer-alist'
+        ;; decides how mu4e's own `display-buffer-in-direction' shares the
+        ;; width; see `my-mail-display-article' further down.
+        mu4e-split-view 'vertical
         mu4e-headers-date-format "%Y-%m-%d %H:%M"
         mu4e-attachment-dir "~/Downloads"
         ;; Keys for the maildir shortcuts in the main view.
@@ -1237,13 +1239,78 @@ on `kill-emacs-query-functions'."
   ;; point happens to be.  `my-tab-bar-select-project' makes the tab when it
   ;; does not exist yet, so this is also the first-run command.
   (defun my-mail ()
-    "Start mu4e in the email workspace.
+    "Start mu4e in the email workspace, on the inbox.
 The frame switches to that workspace's tab first, so the main, headers,
 article and compose buffers are all tabs of the email workspace instead of
-tabs of whichever project the frame was showing."
+tabs of whichever project the frame was showing.  The inbox is searched
+after `mu4e' because that command puts the main view in the selected window
+as well as in the side column, where this config already keeps it; the
+headers take the window over and the redundant copy goes away."
     (interactive)
     (my-tab-bar-select-project (expand-file-name "~/email"))
-    (mu4e))
+    (mu4e)
+    (mu4e-search-maildir "/INBOX"))
+
+  ;; The workspace's folder view is the mu4e main buffer, in the top left side
+  ;; window that `dired-sidecar' keeps.  A listing of `~/email' would be a
+  ;; listing of a directory that holds no files, and the main view is the one
+  ;; thing in mu4e that answers "which folder, and how much is unread in it" --
+  ;; its maildir shortcuts are clickable and refresh their counts themselves.
+  ;; The function answers nil until mu4e has made the buffer, so the workspace
+  ;; entered before mail is started shows its listing and nothing breaks.
+  (defun my-mail-main-buffer ()
+    "Return the mu4e main view buffer, once mu4e has created it.
+`dired-sidecar-substitutes' calls this for the `~/email' workspace."
+    (let ((buffer (get-buffer mu4e-main-buffer-name)))
+      (when (and buffer (with-current-buffer buffer
+                          (derived-mode-p 'mu4e-main-mode)))
+        buffer)))
+
+  (add-to-list 'dired-sidecar-substitutes
+               (cons (directory-file-name (expand-file-name "~/email"))
+                     #'my-mail-main-buffer))
+
+  ;; `(mu4e)' draws the main view itself, and with a split view on it asks for
+  ;; the whole frame (`display-buffer-full-frame' is its choice for that
+  ;; buffer), which would cover the headers and the article.  Sent to the
+  ;; sidecar column instead, it lands in the window the substitute keeps.
+  (add-to-list 'display-buffer-alist
+               `("\\*mu4e-main\\*"
+                 (display-buffer-in-side-window)
+                 (side . left)
+                 (slot . 0)
+                 (window-width . ,(dired-sidecar--requested-width))
+                 (preserve-size t)))
+
+  ;; What is left of the frame after the side column is shared by the headers
+  ;; and the article: the article takes `my-mail-article-share' of the headers
+  ;; window's width and the headers keep the rest.  `display-buffer-in-direction'
+  ;; cannot do that on its own here -- it ignores a `window-width' entry and
+  ;; asks the new window to fit its buffer, which left the headers at 30
+  ;; columns -- so the split is done by hand.
+  (defvar my-mail-article-share 0.6
+    "Share of the headers window's width the article takes.")
+
+  (defun my-mail-display-article (buffer alist)
+    "Display BUFFER in a right-hand split of the window showing the headers.
+BUFFER takes `my-mail-article-share' of that window's width, measured in
+columns, and the headers keep the rest.  An article already on screen is
+reused rather than split again."
+    (let ((reference (or (get-buffer-window "*mu4e-headers*")
+                         (selected-window)))
+          (existing (get-buffer-window buffer)))
+      (if (and (windowp existing) (window-live-p existing)
+               (not (eq existing reference)))
+          (window--display-buffer buffer existing 'reuse alist)
+        (let ((window (split-window
+                       reference
+                       (- (max 40 (floor (* my-mail-article-share
+                                             (window-body-width reference)))))
+                       'right)))
+          (window--display-buffer buffer window 'window alist)))))
+
+  (add-to-list 'display-buffer-alist
+               '("\\*mu4e-article\\*" (my-mail-display-article)))
 
   ;; The tab line draws a file-type icon per tab, and mu4e's buffers are in
   ;; modes `nerd-icons' knows nothing about, so they would all wear the Emacs
