@@ -85,9 +85,25 @@
 When nil, follow `pi-sidecar-width' (35 columns by default), so both
 sidecars ask for the same column.  Once a side window exists the side
 area's width is what counts -- this listing and the pi sidecar share it --
-and the windows can be resized together."
+and the windows can be resized together.
+
+A workspace that needs more room than that, because what it puts in the
+column is wider than a listing, names its own width in
+`dired-sidecar-widths'."
   :type '(choice (const :tag "Follow the pi sidecar" nil)
                  (integer :tag "Columns"))
+  :group 'dired-sidecar)
+
+(defcustom dired-sidecar-widths nil
+  "Alist of (DIRECTORY . COLUMNS) for workspaces that need a wider column.
+DIRECTORY is spelled the way this package spells a workspace root:
+absolute, without a trailing slash.  A workspace listed here gets COLUMNS
+in the left column -- the whole side area, which the pi sidecar shares --
+whenever its sidecar is shown, and the width goes back to
+`dired-sidecar-width' in a workspace that is not listed.  The mail
+workspace wants this because it shows the mu4e main view, whose lines are
+wider than a listing's."
+  :type '(alist :key-type directory :value-type integer)
   :group 'dired-sidecar)
 
 (defcustom dired-sidecar-hide-details t
@@ -479,6 +495,15 @@ already drawn are taken away again."
         (and (integerp width) width))
       35))
 
+(defun dired-sidecar--column-width (&optional root)
+  "Width the left column should have in ROOT's workspace.
+ROOT defaults to the workspace of the selected tab.  That is ROOT's entry
+in `dired-sidecar-widths' when it has one, and `dired-sidecar--requested-width'
+otherwise."
+  (or (when-let* ((root (or root (dired-sidecar--workspace-root))))
+        (cdr (assoc (dired-sidecar--directory root) dired-sidecar-widths)))
+      (dired-sidecar--requested-width)))
+
 (defun dired-sidecar--pi-window (&optional frame)
   "Return FRAME's pi sidecar window, or nil."
   (seq-find (lambda (window)
@@ -501,11 +526,13 @@ the whole side area without asking."
                     ((floatp height) (round (* height (frame-height))))
                     (t 14)))))))
 
-(defun dired-sidecar--display (buffer)
+(defun dired-sidecar--display (buffer &optional root)
   "Show BUFFER at the top of the left side window column.
-No height is asked for when the column is still empty: a side window
-without one takes the side area it is the first into, and the pi sidecar's
-own height is what it carves out below this one.
+ROOT is the workspace the column is being filled for, and only decides how
+wide the column should be; see `dired-sidecar--column-width'.  No height is
+asked for when the column is still empty: a side window without one takes
+the side area it is the first into, and the pi sidecar's own height is what
+it carves out below this one.
 
 The window is dedicated to the listing it shows, which is what keeps the
 pi sidecar's `display-buffer' -- or any other -- from taking the window for
@@ -524,7 +551,7 @@ preserved, leaves it too narrow."
                  `((display-buffer-in-side-window)
                    (side . left)
                    (slot . 0)
-                   (window-width . ,(dired-sidecar--requested-width))
+                   (window-width . ,(dired-sidecar--column-width root))
                    (preserve-size t)
                    ,@(when-let* ((height (dired-sidecar--requested-height)))
                        `((window-height . ,height)))))))
@@ -605,8 +632,10 @@ group, the project of the selected window's buffer, or that buffer's own
                              default-directory))))))
       (dired-sidecar--directory directory))))
 
-(defun dired-sidecar--fit-width (&optional window)
+(defun dired-sidecar--fit-width (&optional window root)
   "Give the left column the width the panels ask for, and keep it.
+WINDOW defaults to the sidecar window and ROOT to the selected tab's
+workspace root; the width itself comes from `dired-sidecar--column-width'.
 A session puts its window states back while the frame is still at its
 start-up size -- 140 columns wide here, not the 282 it is saved at -- so
 the saved pixel width does not fit and `window-state-put' falls back to
@@ -618,7 +647,7 @@ preserved, leaves the column at 17.  So the width is set to the requested
 one here and then preserved; resizing the column by hand clears the
 preserved size and the next follow puts it back."
   (let ((window (or window (dired-sidecar--window)))
-        (width (dired-sidecar--requested-width)))
+        (width (dired-sidecar--column-width root)))
     (when (window-live-p window)
       (let ((delta (- width (window-total-width window))))
         (when (/= delta 0)
@@ -646,7 +675,7 @@ fallback when it returns no live buffer."
       (cond
        ((and window (eq (window-buffer window) buffer)
              (dired-sidecar--in-place-p window))
-        (dired-sidecar--fit-width window)
+        (dired-sidecar--fit-width window root)
         nil)
        ((and window (not (dired-sidecar--in-place-p window))
              (dired-sidecar--movable-p window))
@@ -655,7 +684,7 @@ fallback when it returns no live buffer."
         ;; belongs.  The frame's main window is left alone; a listing there
         ;; is the main area's problem, not this package's.
         (delete-window window)
-        (dired-sidecar--display buffer))
+        (dired-sidecar--display buffer root))
        (window
         ;; The window is ours, so its dedication is ours to drop: it holds
         ;; the listing that was there before, or a tab restored a window
@@ -665,7 +694,7 @@ fallback when it returns no live buffer."
           (set-window-dedicated-p window nil))
         (set-window-buffer window buffer)
         (set-window-dedicated-p window buffer))
-       (t (dired-sidecar--display buffer))))
+       (t (dired-sidecar--display buffer root))))
     ;; The listing that is now on screen may have been read before the
     ;; repository moved on, so its bars are re-checked here.  A substitute
     ;; has no listing and no bars.

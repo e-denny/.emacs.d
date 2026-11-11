@@ -1270,6 +1270,16 @@ headers take the window over and the redundant copy goes away."
                (cons (directory-file-name (expand-file-name "~/email"))
                      #'my-mail-main-buffer))
 
+  ;; The main view is wider than a listing is: its longest line -- the
+  ;; database path under "Info", tab stops expanded -- is 60 columns, and the
+  ;; maildir and bookmark counts push their lines past 45.  The column is the
+  ;; whole left side area, so the pi sidecar is this wide in this workspace
+  ;; too, and every other workspace goes back to the listing's width.  The
+  ;; number is the window's total width; its body is two columns narrower, so
+  ;; 64 gives the 60-column line a couple of columns to grow into.
+  (add-to-list 'dired-sidecar-widths
+               (cons (directory-file-name (expand-file-name "~/email")) 64))
+
   ;; `(mu4e)' draws the main view itself, and with a split view on it asks for
   ;; the whole frame (`display-buffer-full-frame' is its choice for that
   ;; buffer), which would cover the headers and the article.  Sent to the
@@ -1282,23 +1292,36 @@ headers take the window over and the redundant copy goes away."
                  (window-width . ,(dired-sidecar--requested-width))
                  (preserve-size t)))
 
-  ;; What is left of the frame after the side column is shared by the headers
-  ;; and the article: the article takes `my-mail-article-share' of the headers
-  ;; window's width and the headers keep the rest.  `display-buffer-in-direction'
-  ;; cannot do that on its own here -- it ignores a `window-width' entry and
-  ;; asks the new window to fit its buffer, which left the headers at 30
-  ;; columns -- so the split is done by hand.
-  (defvar my-mail-article-share 0.6
+  ;; What is left of the frame after the side column is shared equally by the
+  ;; headers and the article, and neither moves again when a message is
+  ;; opened.  `display-buffer-in-direction' cannot do that on its own here --
+  ;; it ignores a `window-width' entry -- so the split is done by hand, and
+  ;; the size entries mu4e adds (`window-min-width' asked for
+  ;; `fit-window-to-buffer', which grew the article on every display) are
+  ;; dropped on the way through.
+  (defvar my-mail-article-share 0.5
     "Share of the headers window's width the article takes.")
+
+  (defun my-mail--without-size-params (alist)
+    "Return ALIST without the entries that resize the window it lands in."
+    (seq-remove (lambda (entry)
+                  (memq (car-safe entry)
+                        '(window-min-width window-min-height window-size
+                          window-width window-height)))
+                alist))
 
   (defun my-mail-display-article (buffer alist)
     "Display BUFFER in a right-hand split of the window showing the headers.
 BUFFER takes `my-mail-article-share' of that window's width, measured in
-columns, and the headers keep the rest.  An article already on screen is
-reused rather than split again."
-    (let ((reference (or (get-buffer-window "*mu4e-headers*")
-                         (selected-window)))
-          (existing (get-buffer-window buffer)))
+columns, and the headers keep the rest.  The window mu4e recorded for the
+article is reused, whichever buffer it holds at the time: an HTML message
+hands that window to embr, and the next message has to take it back."
+    (let* ((reference (or (get-buffer-window "*mu4e-headers*")
+                          (selected-window)))
+           (recorded (bound-and-true-p mu4e~headers-view-win))
+           (existing (or (and (windowp recorded) (window-live-p recorded) recorded)
+                         (get-buffer-window buffer)))
+           (alist (my-mail--without-size-params alist)))
       (if (and (windowp existing) (window-live-p existing)
                (not (eq existing reference)))
           (window--display-buffer buffer existing 'reuse alist)
@@ -1311,6 +1334,62 @@ reused rather than split again."
 
   (add-to-list 'display-buffer-alist
                '("\\*mu4e-article\\*" (my-mail-display-article)))
+
+  ;; HTML mail is rendered by Chromium in embr instead of being flattened by
+  ;; shr: the article's window keeps its place in the layout and only its
+  ;; buffer changes, so the message arrives with its own styling, its images
+  ;; and its real links.  Text mail is left to mu4e, which is why this hangs
+  ;; off the rendering hook rather than the display rule: the part list is
+  ;; only known once Gnus has decoded the message.
+  (defcustom my-mail-html-in-embr t
+    "Non-nil means show HTML mail in embr instead of the article buffer.
+Text mail goes to the article buffer either way."
+    :type 'boolean)
+
+  (defun my-mail--html-part-p ()
+    "Non-nil when the article being rendered has a text/html part.
+It reads Gnus's handle alist, so it only means anything from
+`mu4e-view-rendered-hook'."
+    (and (fboundp 'mu4e--view-mime-handle)
+         (mu4e--view-mime-handle "text/html")
+         t))
+
+  (defun my-mail-embr-browse-url (url &rest _)
+    "Open URL in embr, in the window that shows the mu4e article.
+`mu4e-action-view-in-browser' hands its temporary HTML file to this,
+through `browse-url-browser-function'."
+    (require 'embr)
+    (let ((window (get-buffer-window "*mu4e-article*"))
+          ;; A mail is not the browsing session that was saved last: start it
+          ;; without restoring those tabs, so the mail is the only page up.
+          ;; The flag is set with `setq' rather than bound with `let': in a
+          ;; lexical-binding file a `defvar' here would not make it special,
+          ;; so the binding would be a no-op, and embr's own `defcustom' is
+          ;; what has to be respected.
+          (restore embr-session-restore))
+      (unwind-protect
+          (with-selected-window (if (window-live-p window) window (selected-window))
+            (setq embr-session-restore nil)
+            (embr-browse url))
+        (setq embr-session-restore restore))))
+
+  (defun my-mail-html-in-embr-maybe ()
+    "Show the article in embr when it is HTML; leave text to mu4e."
+    (when (and my-mail-html-in-embr
+               (derived-mode-p 'mu4e-view-mode)
+               (my-mail--html-part-p))
+      (condition-case error
+          (let ((browse-url-browser-function #'my-mail-embr-browse-url))
+            (mu4e-action-view-in-browser mu4e--view-message))
+        (error (message "my-mail: html mail in embr failed: %S" error)))))
+
+  ;; mu4e resizes the headers window to `mu4e-headers-visible-columns' (30 by
+  ;; default) on every render, which is what let the message pane grow over
+  ;; the headers.  The split above sets both widths, and keeps them, so the
+  ;; function leaves the hook.
+  (setq mu4e-view-rendered-hook
+        (delq 'mu4e-resize-linked-headers-window mu4e-view-rendered-hook))
+  (add-hook 'mu4e-view-rendered-hook #'my-mail-html-in-embr-maybe)
 
   ;; The tab line draws a file-type icon per tab, and mu4e's buffers are in
   ;; modes `nerd-icons' knows nothing about, so they would all wear the Emacs
