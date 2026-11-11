@@ -734,6 +734,20 @@ enabled, and the older one's faces show through where the newer has none."
         ;; browse-url-browser-function 'embr-browse
         ))
 
+;; A browser buffer has no file of its own, so lisp/my-tabs.el files it under
+;; the workspace that shows it -- but only while `project-current' answers nil.
+;; Left alone it inherits `default-directory' from the buffer the page was
+;; opened from, and a project there claims the buffer: clicking the page then
+;; drags the frame to that project's tab.  That is how an HTML mail read from
+;; the ~/email workspace kept jumping to ~/.emacs.d, the directory the article
+;; buffer happened to be made in; the mu4e side of the same problem is fixed
+;; where that buffer is configured.
+(defun my-embr-buffer-directory ()
+  "Give an embr buffer a directory that belongs to no project."
+  (setq-local default-directory (expand-file-name "~/")))
+
+(add-hook 'embr-mode-hook #'my-embr-buffer-directory)
+
 ;; ----------------------------------------------------------------------
 ;; quitting: no questions
 ;; ----------------------------------------------------------------------
@@ -1132,6 +1146,20 @@ on `kill-emacs-query-functions'."
 ;; for org-msg to hook, and no folders for the settings below to name.
 (when (require 'mu4e nil t)
 
+  ;; The mail buffers carry no file of their own, so lisp/my-tabs.el files
+  ;; them under the workspace whose tab shows them -- but only while
+  ;; `project-current' answers nil.  mu4e leaves the article and main buffers
+  ;; with the directory of whatever buffer was current when they were made,
+  ;; which here was ~/.emacs.d: a project, and its tab then took the frame
+  ;; over as soon as one of them was clicked.  The workspace's own directory
+  ;; belongs to no project, so they stay where they are shown.
+  (defun my-mail-buffer-directory ()
+    "Keep a mu4e buffer out of every project's workspace."
+    (setq-local default-directory (expand-file-name "~/email")))
+
+  (add-hook 'mu4e-view-mode-hook #'my-mail-buffer-directory)
+  (add-hook 'mu4e-main-mode-hook #'my-mail-buffer-directory)
+
   ;; `mbsync -a' is what actually fetches; mu4e runs it, then reindexes.
   (setq mu4e-get-mail-command "mbsync -a"
         ;; Pull every five minutes, in the background, and reindex after
@@ -1354,12 +1382,34 @@ It reads Gnus's handle alist, so it only means anything from
          (mu4e--view-mime-handle "text/html")
          t))
 
+  (defun my-mail--embr-window ()
+    "The window a mail's browser page belongs in, making one if there is none.
+That is the window mu4e records for the article -- unless it has been taken
+over by the headers again -- then whatever window already shows embr, then
+the article's own window, and failing all of those the right half of the
+headers window, which is where a message would have gone."
+    (or (and (bound-and-true-p mu4e~headers-view-win)
+             (window-live-p mu4e~headers-view-win)
+             (not (eq (window-buffer mu4e~headers-view-win)
+                      (get-buffer "*mu4e-headers*")))
+             mu4e~headers-view-win)
+        (and (bound-and-true-p embr--normal-buffer)
+             (get-buffer-window embr--normal-buffer))
+        (get-buffer-window "*mu4e-article*")
+        (when (derived-mode-p 'mu4e-headers-mode)
+          (split-window
+           (selected-window)
+           (- (max 40 (floor (* my-mail-article-share
+                                (window-body-width (selected-window))))))
+           'right))))
+
   (defun my-mail-embr-browse-url (url &rest _)
     "Open URL in embr, in the window that shows the mu4e article.
 `mu4e-action-view-in-browser' hands its temporary HTML file to this,
-through `browse-url-browser-function'."
+through `browse-url-browser-function', and `my-mail-show-images' calls it
+directly."
     (require 'embr)
-    (let ((window (get-buffer-window "*mu4e-article*"))
+    (let ((window (my-mail--embr-window))
           ;; A mail is not the browsing session that was saved last: start it
           ;; without restoring those tabs, so the mail is the only page up.
           ;; The flag is set with `setq' rather than bound with `let': in a
@@ -1367,11 +1417,76 @@ through `browse-url-browser-function'."
           ;; so the binding would be a no-op, and embr's own `defcustom' is
           ;; what has to be respected.
           (restore embr-session-restore))
-      (unwind-protect
-          (with-selected-window (if (window-live-p window) window (selected-window))
-            (setq embr-session-restore nil)
-            (embr-browse url))
-        (setq embr-session-restore restore))))
+      (with-selected-window (if (window-live-p window) window (selected-window))
+        (if (embr--buffer-daemon-live-p (bound-and-true-p embr--normal-buffer))
+            ;; A mail and its images belong in one tab, so a tab already
+            ;; showing a message is navigated; one showing anything else gets
+            ;; the mail in a new tab, since that page is not ours to replace.
+            (let ((shown (buffer-local-value 'embr--current-url embr--normal-buffer)))
+              (set-window-buffer (selected-window) embr--normal-buffer)
+              (if (and (stringp shown)
+                       (string-prefix-p "file:///tmp/mu4e-" shown))
+                  (with-current-buffer embr--normal-buffer
+                    (embr-navigate url))
+                (embr-browse url)))
+          (unwind-protect
+              (progn (setq embr-session-restore nil)
+                     (embr-browse url))
+            (setq embr-session-restore restore))))))
+
+  ;; mu4e's HTML carries a Content-Security-Policy of `img-src data:', so
+  ;; only images that arrived inside the message are displayed; the rest are
+  ;; refused by the browser, which is the point.  When the images are wanted,
+  ;; this rebuilds the same document with `https:' and `http:' added to that
+  ;; one directive -- scripts, remote styles, forms and the base URI stay
+  ;; blocked -- and shows it in embr.  Nothing loads until this is called:
+  ;; the images come because they were asked for.  It works from the headers
+  ;; as well as from the article, since for HTML mail the article's window is
+  ;; showing embr and not the message.
+  (defun my-mail--message ()
+    "The message to act on: the article's, or the one at point."
+    (or (and (derived-mode-p 'mu4e-view-mode) mu4e--view-message)
+        (mu4e-message-at-point t)))
+
+  (defun my-mail-show-images ()
+    "Show this article in embr with its remote images allowed."
+    (interactive)
+    (let ((msg (my-mail--message)))
+      (unless msg
+        (user-error "No message at point"))
+      (let* ((html (mu4e-view-html-text msg (mu4e--view-html-insert-headers msg)))
+             (allowed (replace-regexp-in-string "img-src data:"
+                                                "img-src data: https: http:"
+                                                html t t)))
+        (my-mail-embr-browse-url
+         (concat "file://" (mu4e--view-html-temp-file allowed))))))
+
+  (define-key mu4e-view-mode-map (kbd "I") #'my-mail-show-images)
+  (define-key mu4e-headers-mode-map (kbd "I") #'my-mail-show-images)
+
+  ;; ALT+arrows are window navigation everywhere in this config, and mu4e was
+  ;; the exception twice over: `mu4e-search-minor-mode-map' takes
+  ;; M-<left>/M-<right> for its search history -- a minor-mode map, so it
+  ;; outranks every major mode and the global `windmove' bindings -- and the
+  ;; headers and view maps take M-<up>/M-<down> for the previous and next
+  ;; message.  Those two stay on `p' and `n', and the search history moves to
+  ;; C-<left> and C-<right>, next to the `\' that already means "previous
+  ;; search".  It goes in the headers and main maps rather than the minor
+  ;; one, so that C-<left>/C-<right> keep meaning `left-word'/`right-word' in
+  ;; the article, where text is actually read and selected.
+  (dolist (map (list mu4e-search-minor-mode-map
+                     mu4e-headers-mode-map
+                     mu4e-view-mode-map))
+    (when (keymapp map)
+      (define-key map (kbd "M-<left>") #'windmove-left)
+      (define-key map (kbd "M-<right>") #'windmove-right)
+      (define-key map (kbd "M-<up>") #'windmove-up)
+      (define-key map (kbd "M-<down>") #'windmove-down)))
+
+  (dolist (map (list mu4e-headers-mode-map mu4e-main-mode-map))
+    (when (keymapp map)
+      (define-key map (kbd "C-<left>") #'mu4e-search-prev)
+      (define-key map (kbd "C-<right>") #'mu4e-search-next)))
 
   (defun my-mail-html-in-embr-maybe ()
     "Show the article in embr when it is HTML; leave text to mu4e."
