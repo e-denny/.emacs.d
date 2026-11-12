@@ -1066,27 +1066,62 @@ on `kill-emacs-query-functions'."
 (when (require 'org-latex-preview nil t)
   (add-hook 'org-mode-hook #'org-latex-preview-mode))
 
-;; Soft wrap at 100 columns.
+;; Hard wrap at 100 columns, on save.
 ;;
-;; A fixed measure rather than the window width: `visual-fill-column-mode'
-;; sets the window margins from `fill-column', so a paragraph wraps at column
-;; 100 even in a full-frame window. Nothing in the file changes -- this is
-;; display only -- and in a window narrower than 100 columns the margins
-;; collapse to 0, so text still fills the frame. `visual-line-mode' is the
-;; companion it expects: it turns on `word-wrap', so the break falls between
-;; words rather than mid-word, and makes movement act on the lines shown
-;; instead of the long ones stored. `fill-column' is set buffer-locally to the
-;; same 100 so that `M-q' (`org-fill-paragraph') fills to the measure on
-;; screen.
-(defun my-org-soft-wrap-100 ()
-  "Wrap text in the current buffer at 100 columns."
-  (setq-local fill-column 100)
-  (visual-line-mode 1)
-  (visual-fill-column-mode 1))
+;; The breaks live in the file, not in the display: `my-org-fill-on-save'
+;; refills the buffer's paragraphs to 100 columns as it is written, so what
+;; used to be wrapped on screen is wrapped on disk. Paragraphs are refilled
+;; whole, which is `M-q' (`org-fill-paragraph') applied to the file: short
+;; lines join as well as long ones break. Tables, source blocks, example and
+;; verse blocks, LaTeX environments, property drawers and fixed-width lines
+;; are not paragraphs and keep the layout they were written in. Inside a
+;; paragraph, `fill-nobreak-predicate' is given org's own
+;; `org-inside-LaTeX-fragment-p', because the filler has no rule of its own for
+;; inline maths (measured: it split `$a + b = c + d +' / `e$' across two
+;; lines) and a fragment broken over two lines stops being a fragment. That is
+;; the same task AUCTeX's `texmathp' does for LaTeX buffers, done with the org
+;; parser instead: AUCTeX is not installed here, so `texmathp' would be a void
+;; function in every Org buffer. The same 100 goes into `fill-column'
+;; buffer-locally, so an interactive `M-q' fills to the width the save uses.
+(defcustom my-org-fill-width 100
+  "Column Org paragraphs are refilled to, on save and with `M-q'."
+  :type 'integer)
 
-(use-package visual-fill-column
-  :ensure t
-  :hook (org-mode . my-org-soft-wrap-100))
+(defun my-org-fill-on-save ()
+  "Refill every paragraph of the current Org buffer to `fill-column'.
+Run from `before-save-hook', buffer-locally in Org buffers.
+
+The paragraphs are taken from one `org-element-parse-buffer' and filled from
+the end of the buffer backwards: filling rewrites the text it contains, so a
+pass from the top would still be working towards positions that had moved.
+Only `paragraph' elements are filled, which is what keeps tables, source
+blocks, example and verse blocks, LaTeX environments, drawers and
+fixed-width lines out of it. `org-with-wide-buffer' makes the pass cover the
+whole file even when the buffer is saved from a narrowed state, and the outer
+`save-excursion' leaves point where the user left it."
+  (when (and (derived-mode-p 'org-mode)
+             (not buffer-read-only))
+    (org-with-wide-buffer
+     (let ((fill-column (or my-org-fill-width fill-column))
+           (begins (org-element-map (org-element-parse-buffer) 'paragraph
+                     (lambda (paragraph)
+                       (org-element-property :begin paragraph)))))
+       (save-excursion
+         (dolist (begin (sort begins #'>))
+           (save-excursion
+             (goto-char begin)
+             (org-fill-paragraph))))))))
+
+(defun my-org-hard-wrap-100 ()
+  "Fill Org text at `my-org-fill-width' when the buffer is saved."
+  (setq-local fill-column my-org-fill-width)
+  (add-hook 'before-save-hook #'my-org-fill-on-save nil t)
+  ;; "Inside a fragment" is answered by the parser, at every break the filler
+  ;; considers, so no AUCTeX is needed and `$...$', `\\(...\\)' and
+  ;; `\\[...\\]' are all covered.
+  (add-hook 'fill-nobreak-predicate #'org-inside-LaTeX-fragment-p nil t))
+
+(add-hook 'org-mode-hook #'my-org-hard-wrap-100)
 
 ;; org-modern -- headline stars, TODO boxes, tag boxes, table rules and source
 ;; frames drawn with text properties, plus headlines in the `variable-pitch'
