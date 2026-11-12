@@ -602,6 +602,388 @@ enabled, and the older one's faces show through where the newer has none."
         doom-modeline-enable-word-count t))
 
 ;; ----------------------------------------------------------------------
+;; selected window
+;; ----------------------------------------------------------------------
+
+;; A bright four-pixel bar down the left edge of the selected window, so the
+;; active window is obvious at a glance.
+;;
+;; Window decorations cannot be coloured per window: the `fringe' face is
+;; looked up in the buffer on display, and the window parameters documented in
+;; `(elisp)Window Parameters' carry formats but no faces.  Recolouring that
+;; face was the first attempt and it does not hold up -- the frame does not
+;; consider the fringe changed, so the new colour appears only when something
+;; forces a full redraw, and measured on this session the accent stayed painted
+;; on the window the selection had left.  A fringe *bitmap* is different: it
+;; belongs to the line it sits beside, so adding or removing it invalidates
+;; that line the way a `diff-hl' mark does, and redisplay repaints it.  The bar
+;; is therefore a bitmap -- `my-selected-window-bar-width' pixels wide, one
+;; character tall -- put on every line by the buffer-local `line-prefix' and
+;; `wrap-prefix', with a whole-buffer overlay carrying the same two properties
+;; because a variable change alone marks no window for redisplay.
+;;
+;; It is on the left because the prefix starts the line; the right fringe keeps
+;; its width, so continuation glyphs and the diff-hl marks keep their room.  A
+;; buffer shown in two windows wears the bar in both; every other window keeps
+;; the theme's fringe.  Bitmaps only exist on lines that exist, so the bar is
+;; finished off below the last line with an `after-string' of one display row
+;; measured in pixels -- a bitmap of exactly the leftover height, so it meets
+;; the mode line with no gap and no seam.
+(defcustom my-selected-window-bar 'auto
+  "How to colour the bar down the selected window's left edge.
+`auto' follows the theme -- the `doom-modeline-bar' background, the accent the
+active mode line already wears -- so `C-c t' keeps it readable.  A colour
+string fixes it, and nil turns the bar off."
+  :type '(choice (const :tag "Follow the theme" auto)
+                 (color :tag "Fixed colour")
+                 (const :tag "Off" nil))
+  :set (lambda (symbol value)
+         (set-default symbol value)
+         (when (fboundp 'my-selected-window-bar-reapply)
+           (my-selected-window-bar-reapply))))
+
+(defcustom my-selected-window-bar-width 4
+  "Width in pixels of the bar down the selected window's left edge.
+Four is the thickness of the mode line's own bar.  Emacs clips fringe bitmaps
+to the fringe, so this cannot exceed `(window-fringes)'."
+  :type 'integer
+  :set (lambda (symbol value)
+         (set-default symbol value)
+         (when (fboundp 'my-selected-window-bar-reapply)
+           (my-selected-window-bar-reapply))))
+
+(defface my-selected-window-bar-face
+  '((t :foreground "unspecified"))
+  "Face the selected-window bar is drawn with.
+Only its foreground matters -- the bitmap's set pixels take it -- and
+`my-selected-window-bar-reapply' keeps it equal to `my-selected-window-bar'.")
+
+(defvar my-selected-window-bar--colour nil
+  "Colour in force for the bar, recomputed whenever the theme changes.")
+
+(defvar my-selected-window-bar--row-height nil
+  "Character height the bar's line bitmap was last defined for.")
+
+(defvar my-selected-window-bar--row-fringe nil
+  "Fringe width the bar's line bitmap was last defined for.")
+
+(defvar my-selected-window-bar--row-width nil
+  "Bitmap width the bar's line bitmap was last defined for.")
+
+(defvar my-selected-window-bar--fill-height nil
+  "Pixel height the filler bitmap was last defined for.")
+
+(defvar my-selected-window-bar--buffer nil
+  "Buffer currently carrying the bar, or nil.")
+
+(defvar-local my-selected-window-bar--installed nil
+  "Non-nil when the bar is installed in this buffer.")
+
+(defvar-local my-selected-window-bar--saved-line-prefix nil
+  "`line-prefix' this buffer had before the bar was installed.")
+
+(defvar-local my-selected-window-bar--saved-wrap-prefix nil
+  "`wrap-prefix' this buffer had before the bar was installed.")
+
+(defvar-local my-selected-window-bar--bar nil
+  "Overlay carrying the bar's `line-prefix' on this buffer's lines, or nil.")
+
+(defvar-local my-selected-window-bar--filler nil
+  "Overlay adding bar-only display rows below this buffer's last line.
+A fringe bitmap is drawn only on rows that exist, so in a buffer shorter than
+its window the bar would stop at the last line.  The filler is display text,
+so it draws the same bitmap without touching the buffer, and its height is in
+pixels so the bar ends exactly at the mode line.")
+
+(defun my-selected-window-bar--face-colour (face attribute)
+  "Return FACE's ATTRIBUTE as a colour string, or nil if it has none.
+`face-attribute' signals for a face that does not exist, which happens before
+doom-modeline or the theme is loaded, so the face is checked first."
+  (and (facep face)
+       (let ((colour (face-attribute face attribute nil t)))
+         (and (stringp colour) colour))))
+
+(defun my-selected-window-bar--preferred-colour ()
+  "Return the colour `my-selected-window-bar' asks for, or nil for none."
+  (cond ((stringp my-selected-window-bar) my-selected-window-bar)
+        ((eq my-selected-window-bar 'auto)
+         (seq-find #'identity
+                   (list (my-selected-window-bar--face-colour
+                          'doom-modeline-bar :background)
+                         (my-selected-window-bar--face-colour
+                          'mode-line-emphasis :foreground)
+                         (my-selected-window-bar--face-colour
+                          'highlight :background))))
+        (t nil)))
+
+(defun my-selected-window-bar--ok-p (window)
+  "Return non-nil when WINDOW can show the bar."
+  (and (window-live-p window)
+       (not (window-minibuffer-p window))
+       (display-graphic-p (window-frame window))
+       (> (car (window-fringes window)) 0)))
+
+;; The window's first pixel column in the body is the vertical border drawn
+;; between side-by-side windows, and the bar's bitmap is painted under it: the
+;; body bar therefore starts one pixel in, at x+1.  The mode line's accent bar
+;; and the first chip of the tab line start at x instead, so they look one
+;; pixel out of line with it.  Both are drawn one pixel narrower, with that
+;; first column painted in the border's own colour, which makes the line read
+;; as the border running on through the mode line and the tab line.
+;;
+;; The mode line's column is left to the border unconditionally: doom-modeline
+;; caches the accent image for the whole session (`doom-modeline-refresh-bars'
+;; drops it) and one image serves every window, so it cannot vary by window.
+;; What that costs is one border-coloured pixel at the frame's own left edge,
+;; where the window has no border and its body bar starts at x instead.
+(defun my-selected-window-bar--border-colour ()
+  "Return the colour the vertical border between windows is drawn in."
+  (or (my-selected-window-bar--face-colour 'vertical-border :foreground)
+      (my-selected-window-bar--face-colour 'vertical-border :background)
+      "black"))
+
+(defun my-selected-window-bar--bar-image (face width height)
+  "Build doom-modeline's accent bar image: WIDTH by HEIGHT, coloured by FACE.
+Replaces `doom-modeline--create-bar-image' to give the image's first column the
+border's colour; the rest of the bar keeps the accent, so the accent is one
+pixel narrower than the body's bar but starts at the same place."
+  (when (and (image-type-available-p 'pbm)
+             (numberp width) (> width 0)
+             (numberp height) (> height 0))
+    (let* ((edge (min 1 (1- width)))
+           (colour (or (face-background face nil t) "None")))
+      (propertize " " 'display
+                  (ignore-errors
+                    (create-image
+                     (concat (format "P1\n%i %i\n" width height)
+                             (mapconcat (lambda (_row)
+                                          (concat (make-string edge ?0)
+                                                  (make-string (- width edge) ?1)))
+                                        (number-sequence 1 height)
+                                        "\n")
+                             "\n")
+                     'pbm t :scale 1 :foreground colour
+                     :background (my-selected-window-bar--border-colour)
+                     :ascent 'center))))))
+
+(defun my-selected-window-bar--geometry (window)
+  "Return the list (FRINGE HEIGHT WIDTH) for WINDOW's bar bitmap.
+HEIGHT is a whole character, because a line bitmap is clipped to its row."
+  (let* ((fringe (max 1 (or (car (window-fringes window)) 8)))
+         (height (frame-char-height (window-frame window)))
+         (width (min (max 1 my-selected-window-bar-width) fringe)))
+    (list fringe height width)))
+
+(defun my-selected-window-bar--define (bitmap height fringe width)
+  "Define BITMAP as HEIGHT rows tall and FRINGE pixels wide, bar WIDTH wide.
+Emacs centres a bitmap inside the fringe, which left a two-pixel gap between
+the bar and the window's edge and put it out of line with the mode line's bar.
+The bitmap is therefore defined at the fringe's full width with only its
+leftmost WIDTH pixel columns set."
+  (define-fringe-bitmap bitmap
+    (make-vector height (ash (1- (ash 1 width)) (- fringe width)))
+    height fringe 'top))
+
+(defun my-selected-window-bar--row-prefix (window)
+  "Return the display string that puts the bar on one row of WINDOW."
+  (let* ((geometry (my-selected-window-bar--geometry window))
+         (fringe (nth 0 geometry))
+         (height (nth 1 geometry))
+         (width (nth 2 geometry)))
+    (unless (and (equal height my-selected-window-bar--row-height)
+                 (equal fringe my-selected-window-bar--row-fringe)
+                 (equal width my-selected-window-bar--row-width))
+      (my-selected-window-bar--define 'my-selected-window-bar-bmp
+                                      height fringe width)
+      (setq my-selected-window-bar--row-height height
+            my-selected-window-bar--row-fringe fringe
+            my-selected-window-bar--row-width width))
+    (propertize " " 'display '(left-fringe my-selected-window-bar-bmp
+                                           my-selected-window-bar-face))))
+
+(defun my-selected-window-bar--filler-string (window height ends)
+  "Return display text that paints the bar over HEIGHT pixels below the text.
+HEIGHT is exact rather than a whole line, so the bar reaches the mode line
+instead of stopping a few pixels short of it.  It is built from whole rows plus
+one remainder row because a fringe bitmap is limited to 255 rows tall.  ENDS
+says the buffer's last row is already empty, in which case the first row goes on
+it rather than on a new row -- otherwise a blank, barless line would separate
+the text from the bar."
+  (let* ((geometry (my-selected-window-bar--geometry window))
+         (fringe (nth 0 geometry))
+         (char-h (nth 1 geometry))
+         (width (nth 2 geometry))
+         (full (/ height char-h))
+         (extra (- height (* full char-h)))
+         (row (my-selected-window-bar--row-prefix window)))
+    (concat (unless ends "\n")
+            (mapconcat #'identity (make-vector full row) "\n")
+            (when (> extra 0)
+              (unless (equal extra my-selected-window-bar--fill-height)
+                (my-selected-window-bar--define 'my-selected-window-bar-fill-bmp
+                                                extra fringe width)
+                (setq my-selected-window-bar--fill-height extra))
+              (concat (if (or ends (> full 0)) "\n" "")
+                      (propertize " " 'display '(left-fringe
+                                                  my-selected-window-bar-fill-bmp
+                                                  my-selected-window-bar-face))
+                      ;; the spacer is what makes the row exactly EXTRA pixels tall
+                      (propertize " " 'display (list 'space :width '(1)
+                                                      :height (list extra))))))))
+
+(defun my-selected-window-bar--window (&optional window)
+  "Return the window that should show the bar, preferring WINDOW."
+  (let ((buffer my-selected-window-bar--buffer))
+    (cond ((and (window-live-p window) (eq (window-buffer window) buffer))
+           window)
+          ((and (window-live-p (selected-window))
+                (eq (window-buffer (selected-window)) buffer))
+           (selected-window))
+          ((get-buffer-window buffer t))
+          ((get-buffer-window buffer)))))
+
+(defun my-selected-window-bar--fill (&optional window &rest _)
+  "Size the filler so the bar runs from the last line to the mode line.
+Runs from the window hooks -- which pass a window, a frame, or nothing -- and
+from the buffer's own change hook, so it never trusts the current buffer."
+  (when (and (buffer-live-p my-selected-window-bar--buffer)
+             (overlayp my-selected-window-bar--filler))
+    (let ((buffer my-selected-window-bar--buffer))
+      (with-current-buffer buffer
+        (let* ((window (my-selected-window-bar--window window))
+               (char-h (and window (frame-char-height (window-frame window))))
+               (string nil))
+          (when (and char-h
+                     (pos-visible-in-window-p (point-max) window)
+                     (equal (window-start window) (point-min)))
+            (let* ((ends (eq (char-before (point-max)) ?\n))
+                   (posn (posn-at-point (point-max) window))
+                   (y (and posn (cdr (posn-x-y posn))))
+                   (top (and y (+ y (if ends 0 char-h))))
+                   (inside (window-inside-pixel-edges window))
+                   (body (- (nth 3 inside) (nth 1 inside)))
+                   (height (and top (- body top))))
+              (when (and height (> height 0) (<= height body))
+                (setq string (my-selected-window-bar--filler-string
+                              window height ends)))))
+          (move-overlay my-selected-window-bar--filler
+                        (point-max) (point-max) buffer)
+          (unless (equal string
+                         (overlay-get my-selected-window-bar--filler 'after-string))
+            (overlay-put my-selected-window-bar--filler 'after-string string)))))))
+
+(defun my-selected-window-bar--install (buffer window)
+  "Put the bar on BUFFER, which WINDOW is showing."
+  (let ((prefix (my-selected-window-bar--row-prefix window)))
+    (with-current-buffer buffer
+      ;; Both forms are set: the buffer-local variable covers every line even
+      ;; when the overlay's extent has been damaged (a terminal buffer erases
+      ;; itself, and erasing shrinks an overlay to nothing), while the overlay
+      ;; is what marks the window for redisplay -- a variable changes nothing
+      ;; on screen by itself.  A text property takes precedence over the
+      ;; variable, so the bar is still drawn once per line.
+      (unless my-selected-window-bar--installed
+        (setq my-selected-window-bar--saved-line-prefix line-prefix
+              my-selected-window-bar--saved-wrap-prefix wrap-prefix
+              my-selected-window-bar--installed t))
+      (setq line-prefix prefix
+            wrap-prefix prefix)
+      (unless (overlayp my-selected-window-bar--bar)
+        (setq my-selected-window-bar--bar (make-overlay (point-min) (point-max) buffer)))
+      (overlay-put my-selected-window-bar--bar 'line-prefix prefix)
+      (overlay-put my-selected-window-bar--bar 'wrap-prefix prefix)
+      (unless (overlayp my-selected-window-bar--filler)
+        (setq my-selected-window-bar--filler
+              (make-overlay (point-max) (point-max) buffer)))
+      (add-hook 'after-change-functions #'my-selected-window-bar--fill nil t))
+    (force-window-update window)
+    (my-selected-window-bar--fill window)))
+
+(defun my-selected-window-bar--drop ()
+  "Remove the bar from whichever buffer carries it."
+  (when (buffer-live-p my-selected-window-bar--buffer)
+    (with-current-buffer my-selected-window-bar--buffer
+      (remove-hook 'after-change-functions #'my-selected-window-bar--fill t)
+      (dolist (overlay (list my-selected-window-bar--filler my-selected-window-bar--bar))
+        (when (overlayp overlay)
+          (delete-overlay overlay)))
+      (setq my-selected-window-bar--filler nil
+            my-selected-window-bar--bar nil)
+      (when my-selected-window-bar--installed
+        (setq line-prefix my-selected-window-bar--saved-line-prefix
+              wrap-prefix my-selected-window-bar--saved-wrap-prefix
+              my-selected-window-bar--installed nil
+              my-selected-window-bar--saved-line-prefix nil
+              my-selected-window-bar--saved-wrap-prefix nil)
+        (dolist (window (get-buffer-window-list my-selected-window-bar--buffer t t))
+          (force-window-update window)))))
+  (setq my-selected-window-bar--buffer nil))
+
+(defun my-selected-window-bar-refresh (&rest _)
+  "Put the bar on the selected window's buffer, take it off the last one.
+Idempotent: it only reinstalls when the selected window's buffer changed,
+which is what makes it safe on every window hook."
+  (let* ((window (selected-window))
+         (wanted (and my-selected-window-bar--colour
+                      (my-selected-window-bar--ok-p window)
+                      (window-buffer window))))
+    (if (eq wanted my-selected-window-bar--buffer)
+        ;; same buffer, possibly a different window or window height
+        (my-selected-window-bar--fill window)
+      (my-selected-window-bar--drop)
+      (when wanted
+        (setq my-selected-window-bar--buffer wanted)
+        (my-selected-window-bar--install wanted window)))))
+
+(defun my-selected-window-bar-reapply ()
+  "Recompute the bar's colour and put it back where it belongs.
+Call this after changing `my-selected-window-bar' or
+`my-selected-window-bar-width' with a plain `setq'; Customize calls it by
+itself, and so does a theme change."
+  (interactive)
+  (setq my-selected-window-bar--colour (my-selected-window-bar--preferred-colour))
+  (when (facep 'my-selected-window-bar-face)
+    (set-face-attribute 'my-selected-window-bar-face nil :foreground
+                        (or my-selected-window-bar--colour
+                            (my-selected-window-bar--face-colour
+                             'fringe :foreground))))
+  ;; force the bitmaps to be redefined for the new colour and size
+  (setq my-selected-window-bar--row-height nil
+        my-selected-window-bar--row-fringe nil
+        my-selected-window-bar--row-width nil
+        my-selected-window-bar--fill-height nil)
+  (my-selected-window-bar--drop)
+  (my-selected-window-bar-refresh))
+
+;; The window change hooks are the right trigger: Emacs runs their default
+;; value for frame events, so a buffer-local value cannot shadow them -- which
+;; is why `doom-modeline' uses the same hook.  The bar is text on the lines it
+;; belongs to, so it is repainted with those lines rather than needing a full
+;; redraw of the frame.
+(add-hook 'window-selection-change-functions #'my-selected-window-bar-refresh)
+(add-hook 'window-buffer-change-functions #'my-selected-window-bar-refresh)
+;; Two more ways the selection changes without the two above noticing: a
+;; rebuilt layout (a tab or workspace switch restores a whole window
+;; configuration) and a frame taking focus.
+(add-hook 'window-configuration-change-hook #'my-selected-window-bar-refresh)
+(add-function :after after-focus-change-function #'my-selected-window-bar-refresh)
+;; A resize or a scroll changes how many lines the window has left over.
+(add-hook 'window-size-change-functions #'my-selected-window-bar--fill)
+(add-hook 'window-scroll-functions #'my-selected-window-bar--fill)
+;; `C-c t' loads the other theme, which changes what `doom-modeline-bar' says.
+(when (boundp 'enable-theme-functions)
+  (add-hook 'enable-theme-functions #'my-selected-window-bar-reapply))
+;; doom-modeline draws the mode line's accent as a four-pixel image; give that
+;; image the border-coloured first column, so the accent begins where the bar
+;; down the body begins.
+(when (and (fboundp 'doom-modeline--create-bar-image)
+           (not (advice-member-p #'my-selected-window-bar--bar-image
+                                 'doom-modeline--create-bar-image)))
+  (advice-add 'doom-modeline--create-bar-image :override
+              #'my-selected-window-bar--bar-image))
+(my-selected-window-bar-reapply)
+
+;; ----------------------------------------------------------------------
 ;; tabs
 ;; ----------------------------------------------------------------------
 

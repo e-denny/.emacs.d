@@ -227,7 +227,25 @@ runs from the top of the row to the bottom."
           :background color
           :height (my-tabs--scale))))
 
-(defun my-tabs--pill (text face bar-face)
+(defun my-tabs--edge-width ()
+  "Return 1 when the window being formatted has a border at its left.
+The tab line's format is evaluated with the window it belongs to selected, and
+a window that is not at the frame's left edge has a one-pixel vertical border
+drawn over its first column."
+  (let ((window (selected-window)))
+    (if (and (window-live-p window)
+             (> (nth 0 (window-pixel-edges window)) 0))
+        1
+      0)))
+
+(defun my-tabs--border-colour ()
+  "Return the colour the vertical border between windows is drawn in."
+  (or (and (facep 'vertical-border)
+           (let ((colour (face-attribute 'vertical-border :foreground nil t)))
+             (and (stringp colour) colour)))
+      "black"))
+
+(defun my-tabs--pill (text face bar-face &optional first)
   "Put TEXT in a chip: an accent bar, a space, the text, a pad and a cap.
 TEXT should already carry FACE itself; the bar, the space after it, the
 pad and the cap are propertized here.  The bar's cell is drawn in
@@ -236,7 +254,10 @@ chip; the chip's own background is FACE's, pulled toward the accent by
 `my-tabs-active-tint' when the theme makes it differ from the bar --
 which is how a selected chip is told apart from an inactive one.  An
 inactive chip, whose background is the bar's, gets only the grey bar and
-the padding, and so runs into the bar the way it always did."
+the padding, and so runs into the bar the way it always did.
+FIRST says this chip is the window's first, which sits over the vertical
+border between windows: its bar leaves that first pixel column to the border,
+so it starts where the bar down the window's body starts."
   (let* ((background (my-tabs--color :background face))
          (bar (my-tabs--color :background bar-face))
          (selected (and background bar (not (equal background bar))))
@@ -252,11 +273,23 @@ the padding, and so runs into the bar the way it always did."
          ;; its face's background: a block glyph would be a fraction of a
          ;; character wide, and no fractions wider than an eighth fill
          ;; from the right.
-         (bar-cell (propertize " "
-                               'display (list 'space :width
-                                              (list (my-tabs--bar-width
-                                                     selected)))
-                               'face (my-tabs--accent-face selected)))
+         (edge (if first (min (my-tabs--edge-width)
+                              (1- (my-tabs--bar-width selected)))
+                 0))
+         (border (my-tabs--border-colour))
+         (bar-cell (concat
+                    (when (> edge 0)
+                      (propertize " "
+                                  'display (list 'space :width (list edge))
+                                  'face (list :foreground border
+                                              :background border
+                                              :height (my-tabs--scale))))
+                    (propertize " "
+                                'display (list 'space :width
+                                               (list (- (my-tabs--bar-width
+                                                         selected)
+                                                        edge)))
+                                'face (my-tabs--accent-face selected))))
          (cap (cdr (assq my-tabs-edge-style my-tabs--caps))))
     (when (and selected (not (equal surface background)))
       ;; Prepend, because the first face to set an attribute wins and the
@@ -546,7 +579,8 @@ front of the name."
          ;; front of it: the icon has no background of its own.
          (face (get-text-property 0 'face text)))
     (my-tabs--pill (concat (my-tabs-buffer-icon tab face) text)
-                   face 'tab-line)))
+                   face 'tab-line
+                   (eq tab (car tabs)))))
 
 ;; The blog's close cross is `tab-line-close-button', drawn as an SVG image
 ;; on a graphical frame; redraw it as the Material Design "x", which the
