@@ -401,15 +401,17 @@ short and the note would be laid out on the wrong row."
 
 ;;;; Display rows
 ;;
-;; The sidecar is laid out on the *screen rows* of the reviewed window, not on
-;; its line numbers.  A long line soft-wraps in the reviewed window (the user's
-;; Org setup fills at 100 columns, and any file wraps in a narrow window), so
-;; that line covers several rows while a line number only names one; counting
-;; lines would leave every note below it that many rows too high.  Rows are
-;; what the eye compares, so rows are what both the layout and the scroll sync
-;; use.  The sidecar itself never wraps (truncation is on and it has no line
-;; numbers), so one sidecar line is exactly one row, and sidecar line R+1 sits
-;; on row R of the reviewed file -- line 1 is the hidden source header.
+;; The sidecar is laid out on the *screen rows* of the reviewed window, not
+;; on its line numbers.  A long line soft-wraps in the reviewed window -- Org
+;; files are hard-wrapped to 100 columns when they are saved, but a 100-column
+;; line still wraps in a narrower window, and a file not yet written since it
+;; was wrapped has longer ones -- so that line covers several rows while a
+;; line number only names one; counting lines would leave every note below it
+;; that many rows too high.  Rows are what the eye compares, so rows are what
+;; both the layout and the scroll sync use.  The sidecar itself never wraps
+;; (truncation is on and it has no line numbers), so one sidecar line is
+;; exactly one row, and sidecar line R+1 sits on row R of the reviewed file --
+;; line 1 is the hidden source header.
 
 (defun pi-annotate--rows (review)
   "Return REVIEW's row table, rebuilding it when the reviewed window changed.
@@ -1132,17 +1134,25 @@ The previous window layout is remembered and put back when the review ends."
       (setq-local word-wrap nil)
       (setq-local display-line-numbers nil)
       (display-line-numbers-mode -1)
-      ;; The buffer's own modes may want to centre or soft-wrap prose (the
-      ;; user's org hooks turned on `visual-fill-column-mode' and
-      ;; `visual-line-mode'): both fight the fixed line layout below, and the
-      ;; fill-column margins leave the rules short of the window.
+      ;; The sidecar inherits its file's major mode -- a `.comments.org'
+      ;; sidecar opens in Org -- so it inherits whatever that mode does to
+      ;; prose as well.  A wrapping or centring mode fights the fixed line
+      ;; layout below: with `visual-line-mode' or `visual-fill-column-mode' on,
+      ;; one note takes several screen rows and the rules beside it no longer
+      ;; line up with the text they annotate.  Nothing in this configuration
+      ;; turns either on any more (Org is hard-wrapped when it is saved, not
+      ;; wrapped on screen), so these two calls are a guard against a global
+      ;; mode or a hook added later rather than a fix for a known setting.
       (when (fboundp 'visual-line-mode) (visual-line-mode -1))
       (when (fboundp 'visual-fill-column-mode) (visual-fill-column-mode -1))
       ;; The sidecar is laid out one note per screen row, so each note must
       ;; stay one screen line: overlong notes are wrapped into real lines by
       ;; `pi-annotate--reflow' once typing stops, not soft-wrapped by
       ;; redisplay.  No `auto-fill-mode' either: it would insert fill breaks
-      ;; on its own schedule, in the middle of a note.
+      ;; on its own schedule, in the middle of a note.  The Org save hook
+      ;; cannot refill the notes either: the sidecar is written with
+      ;; `write-region' and never passes through `save-buffer', and the width
+      ;; kept here is `pi-annotate--text-width'.
       (setq-local fill-column (pi-annotate--text-width review)))
     (with-current-buffer main
       (setq-local truncate-lines nil))
