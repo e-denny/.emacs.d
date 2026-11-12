@@ -670,8 +670,14 @@ Only its foreground matters -- the bitmap's set pixels take it -- and
 (defvar my-selected-window-bar--row-width nil
   "Bitmap width the bar's line bitmap was last defined for.")
 
-(defvar my-selected-window-bar--fill-height nil
-  "Pixel height the filler bitmap was last defined for.")
+(defvar my-selected-window-bar--row-bitmap nil
+  "Name of the bitmap that draws the bar on a line, or nil.")
+
+(defvar my-selected-window-bar--fill-bitmap nil
+  "Name of the bitmap that draws the filler row, or nil.")
+
+(defvar my-selected-window-bar--fill-obsolete nil
+  "Filler bitmap to destroy once its text is off screen, or nil.")
 
 (defvar my-selected-window-bar--buffer nil
   "Buffer currently carrying the bar, or nil.")
@@ -774,15 +780,16 @@ HEIGHT is a whole character, because a line bitmap is clipped to its row."
          (width (min (max 1 my-selected-window-bar-width) fringe)))
     (list fringe height width)))
 
-(defun my-selected-window-bar--define (bitmap height fringe width)
+(defun my-selected-window-bar--define (bitmap height fringe width &optional align)
   "Define BITMAP as HEIGHT rows tall and FRINGE pixels wide, bar WIDTH wide.
 Emacs centres a bitmap inside the fringe, which left a two-pixel gap between
 the bar and the window's edge and put it out of line with the mode line's bar.
 The bitmap is therefore defined at the fringe's full width with only its
-leftmost WIDTH pixel columns set."
+leftmost WIDTH pixel columns set.  ALIGN places it in its row, `top' by
+default."
   (define-fringe-bitmap bitmap
     (make-vector height (ash (1- (ash 1 width)) (- fringe width)))
-    height fringe 'top))
+    height fringe (or align 'top)))
 
 (defun my-selected-window-bar--row-prefix (window)
   "Return the display string that puts the bar on one row of WINDOW."
@@ -792,14 +799,31 @@ leftmost WIDTH pixel columns set."
          (width (nth 2 geometry)))
     (unless (and (equal height my-selected-window-bar--row-height)
                  (equal fringe my-selected-window-bar--row-fringe)
-                 (equal width my-selected-window-bar--row-width))
-      (my-selected-window-bar--define 'my-selected-window-bar-bmp
-                                      height fringe width)
+                 (equal width my-selected-window-bar--row-width)
+                 my-selected-window-bar--row-bitmap)
+      ;; Each geometry gets a bitmap of its own name: the fringe keeps the image
+      ;; it drew for a bitmap name, so redefining the same name leaves the old
+      ;; drawing on screen -- measured, a redefined bitmap kept its old rows
+      ;; until a new name was used.
+      (setq my-selected-window-bar--row-bitmap
+            (intern (format "my-selected-window-bar-%dx%dx%d"
+                            (+ height 2) fringe width)))
+      ;; Two rows taller than the line, centred, so that each row's bitmap
+      ;; covers the pixel above and below it with the same bar.  Measured on
+      ;; this display, whose compositor scales the frame by 1.5, a bitmap as
+      ;; tall as the line leaves a faint darkening at every line boundary:
+      ;; each row's bitmap is a separate image and the scaling leaves its edge
+      ;; partly uncovered.  With the overlap the bar measured one colour from
+      ;; the top of the window to the mode line; without it, 125 rows of a
+      ;; 1893-row window came out 18% darker.
+      (my-selected-window-bar--define my-selected-window-bar--row-bitmap
+                                      (+ height 2) fringe width 'center)
       (setq my-selected-window-bar--row-height height
             my-selected-window-bar--row-fringe fringe
             my-selected-window-bar--row-width width))
-    (propertize " " 'display '(left-fringe my-selected-window-bar-bmp
-                                           my-selected-window-bar-face))))
+    (propertize " " 'display (list 'left-fringe
+                                    my-selected-window-bar--row-bitmap
+                                    'my-selected-window-bar-face))))
 
 (defun my-selected-window-bar--filler-string (window height ends)
   "Return display text that paints the bar over HEIGHT pixels below the text.
@@ -819,17 +843,20 @@ the text from the bar."
     (concat (unless ends "\n")
             (mapconcat #'identity (make-vector full row) "\n")
             (when (> extra 0)
-              (unless (equal extra my-selected-window-bar--fill-height)
-                (my-selected-window-bar--define 'my-selected-window-bar-fill-bmp
-                                                extra fringe width)
-                (setq my-selected-window-bar--fill-height extra))
-              (concat (if (or ends (> full 0)) "\n" "")
-                      (propertize " " 'display '(left-fringe
-                                                  my-selected-window-bar-fill-bmp
-                                                  my-selected-window-bar-face))
-                      ;; the spacer is what makes the row exactly EXTRA pixels tall
-                      (propertize " " 'display (list 'space :width '(1)
-                                                      :height (list extra))))))))
+              (let ((symbol (intern (format "my-selected-window-bar-fill-%dx%dx%d"
+                                            extra fringe width))))
+                (unless (equal symbol my-selected-window-bar--fill-bitmap)
+                  ;; a new name, because a redefined bitmap is not redrawn
+                  (setq my-selected-window-bar--fill-obsolete
+                        my-selected-window-bar--fill-bitmap
+                        my-selected-window-bar--fill-bitmap symbol)
+                  (my-selected-window-bar--define symbol extra fringe width))
+                (concat (if (or ends (> full 0)) "\n" "")
+                        (propertize " " 'display (list 'left-fringe symbol
+                                                        'my-selected-window-bar-face))
+                        ;; the spacer is what makes the row exactly EXTRA pixels tall
+                        (propertize " " 'display (list 'space :width '(1)
+                                                        :height (list extra)))))))))
 
 (defun my-selected-window-bar--window (&optional window)
   "Return the window that should show the bar, preferring WINDOW."
@@ -870,7 +897,13 @@ from the buffer's own change hook, so it never trusts the current buffer."
                         (point-max) (point-max) buffer)
           (unless (equal string
                          (overlay-get my-selected-window-bar--filler 'after-string))
-            (overlay-put my-selected-window-bar--filler 'after-string string)))))))
+            (overlay-put my-selected-window-bar--filler 'after-string string))
+          ;; the previous filler bitmap is off screen now, so its name can go
+          (let ((old my-selected-window-bar--fill-obsolete))
+            (setq my-selected-window-bar--fill-obsolete nil)
+            (when (and old (not (equal old my-selected-window-bar--fill-bitmap))
+                       (fringe-bitmap-p old))
+              (destroy-fringe-bitmap old))))))))
 
 (defun my-selected-window-bar--install (buffer window)
   "Put the bar on BUFFER, which WINDOW is showing."
@@ -947,11 +980,14 @@ itself, and so does a theme change."
                         (or my-selected-window-bar--colour
                             (my-selected-window-bar--face-colour
                              'fringe :foreground))))
-  ;; force the bitmaps to be redefined for the new colour and size
+  ;; force the bitmaps to be redefined for the new colour and size; a new size
+  ;; gets a new bitmap name, which is what makes the fringe redraw it
   (setq my-selected-window-bar--row-height nil
         my-selected-window-bar--row-fringe nil
         my-selected-window-bar--row-width nil
-        my-selected-window-bar--fill-height nil)
+        my-selected-window-bar--row-bitmap nil
+        my-selected-window-bar--fill-bitmap nil
+        my-selected-window-bar--fill-obsolete nil)
   (my-selected-window-bar--drop)
   (my-selected-window-bar-refresh))
 
