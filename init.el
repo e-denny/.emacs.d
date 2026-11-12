@@ -1363,6 +1363,33 @@ hands that window to embr, and the next message has to take it back."
   (add-to-list 'display-buffer-alist
                '("\\*mu4e-article\\*" (my-mail-display-article)))
 
+  ;; A message is opened from the headers list, but `mu4e-view' ends by
+  ;; selecting the window it displayed the article in
+  ;; (`select-window mu4e~headers-view-win'), so every message read out of a
+  ;; folder pulled the cursor into the article -- and for HTML mail into the
+  ;; embr page -- and the next `n' went to the wrong buffer.  The window the
+  ;; command came from takes the selection back.  Opened from anywhere else
+  ;; -- `n'/`p' while the article already holds the selection, `y' between the
+  ;; two -- mu4e's own choice stands; the article's window is still the
+  ;; selected window while the buffer is rendered, so the rendering hooks that
+  ;; depend on it are unaffected.
+  (defun my-mail-keep-focus-in-headers (view-function &rest args)
+    "Run VIEW-FUNCTION and give the selection back to the headers window.
+The selection only moves if VIEW-FUNCTION took it out of a window that is
+showing a `mu4e-headers-mode' buffer."
+    (let ((origin (selected-window)))
+      (unwind-protect
+          (apply view-function args)
+        (when (and (window-live-p origin)
+                   (not (eq (selected-window) origin))
+                   (buffer-live-p (window-buffer origin))
+                   (with-current-buffer (window-buffer origin)
+                     (derived-mode-p 'mu4e-headers-mode)))
+          (select-window origin)))))
+
+  (unless (advice-member-p #'my-mail-keep-focus-in-headers 'mu4e-view)
+    (advice-add 'mu4e-view :around #'my-mail-keep-focus-in-headers))
+
   ;; HTML mail is rendered by Chromium in embr instead of being flattened by
   ;; shr: the article's window keeps its place in the layout and only its
   ;; buffer changes, so the message arrives with its own styling, its images
