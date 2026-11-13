@@ -1332,20 +1332,40 @@ the position the last sync agreed on."
         (pi-annotate--set-start main target)
         t))))
 
+(defun pi-annotate--pre-redisplay (&optional _window)
+  "Make the follower right before the window about to be painted is laid out.
+`window-scroll-functions' does the same job one window earlier, while the
+window that scrolled is being laid out, and a start given to the *other*
+window at that point takes effect only on the next redisplay cycle -- which
+arrives with the next event, so the sidecar sits on the wrong rows until the
+hand moves again.  This hook runs in each review buffer just before one of its
+windows is laid out, and the reviewed window is the left-hand one, so by the
+time the sidecar is reached the reviewed window has already scrolled."
+  (pi-annotate--scroll-all))
+
 (defun pi-annotate--scroll-all (&optional _window _new-start)
   "Keep REVIEW's two windows on the same screen row.
-WINDOW and NEW-START are what `window-scroll-functions' passes and are not
-needed: the follower is chosen by comparing the two windows' starts with the
-pair recorded by the last sync, which is also what makes this safe to call
-from `post-command-hook'.
+WINDOW and NEW-START are ignored: the follower is chosen by comparing the two
+windows' starts with the pair recorded by the last sync, which is also what
+makes this safe to call from any of its three callers -- `post-command-hook',
+`window-scroll-functions' and `pre-redisplay-functions'.
 
-That is deliberate on two counts.  Comparing the actual starts rather than a
-remembered line means a scroll *inside* one soft-wrapped line still moves the
-sidecar; a line number does not change there, so a line-keyed sync froze and
-then jumped when the line finally did change.  And running before redisplay,
-from the command loop, keeps the second window from being one redisplay
-behind: a window that is redisplayed before the one that scrolled would
-otherwise only catch up on the next command."
+Comparing the actual starts rather than a remembered line means a scroll
+*inside* one soft-wrapped line still moves the sidecar; a line number does not
+change there, so a line-keyed sync froze and then jumped when the line finally
+did change.
+
+The three callers cover three different moments, and all three are needed.
+A command that scrolls the reviewed window outright -- `C-v', a wheel event, a
+jump -- has already moved its start when `post-command-hook' runs, so that is
+the earliest point to follow it.  A scroll Emacs performs *while displaying*,
+which is what the arrow keys do at the window edge, grows no start until
+redisplay lays the window out, so it is caught by `window-scroll-functions'
+-- and that call is also what marks the sidecar for repaint.  Finally, a start
+handed to the other window during redisplay is honoured on the *next* cycle,
+which may only arrive with the next event; `pre-redisplay-functions' runs in
+the sidecar's own buffer just before that window is laid out, so whatever the
+other two hooks left stale is corrected for the frame being painted now."
   (when (and pi-annotate-scroll-sync
              (pi-annotate--active-p)
              (not pi-annotate--syncing))
@@ -1802,6 +1822,7 @@ anyway."
       (add-hook 'after-change-functions #'pi-annotate--after-change nil t)
       (add-hook 'post-command-hook #'pi-annotate--after-command t)
       (add-hook 'window-scroll-functions #'pi-annotate--scroll-all nil t)
+      (add-hook 'pre-redisplay-functions #'pi-annotate--pre-redisplay nil t)
       (add-hook 'kill-buffer-hook #'pi-annotate--buffer-killed nil t)
       (pi-annotate-mode 1))))
 
