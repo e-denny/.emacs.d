@@ -288,6 +288,9 @@ many columns the rule should fill."
   decorations                    ; id -> rule/highlight overlays in the sidecar
   rows rows-key rows-total       ; display rows of the reviewed file's lines
   sync-main sync-side            ; window starts the two windows agree on
+  sync-main-mark sync-side-mark  ; the same two starts, as markers
+  sync-gen                       ; `layout-gen' when that pair was recorded
+  layout-gen                     ; bumped whenever the rows may have moved
   window-config timer ended)
 
 (defvar pi-annotate--review nil
@@ -1172,35 +1175,86 @@ The previous window layout is remembered and put back when the review ends."
       (line-number-at-pos))))
 
 (defun pi-annotate--record-sync (review)
-  "Remember the window starts REVIEW's two windows currently show."
+  "Remember the window starts REVIEW's two windows currently show.
+The pair is kept twice: as the plain positions `pi-annotate--scroll-all'
+compares, and as markers.  The markers are what the next sync measures the
+scroll step against -- they follow an edit, so a note typed into one buffer
+does not leave the pair pointing at text that has moved."
   (let ((main (pi-annotate--review-main-window review))
         (sidecar (pi-annotate--review-sidecar-window review)))
     (when (and (window-live-p main) (window-live-p sidecar))
-      (setf (pi-annotate--review-sync-main review) (window-start main)
-            (pi-annotate--review-sync-side review) (window-start sidecar)))))
+      (let ((main-start (window-start main))
+            (side-start (window-start sidecar)))
+        (setf (pi-annotate--review-sync-main review) main-start
+              (pi-annotate--review-sync-side review) side-start
+              (pi-annotate--review-sync-main-mark review)
+              (with-current-buffer (window-buffer main)
+                (copy-marker main-start))
+              (pi-annotate--review-sync-side-mark review)
+              (with-current-buffer (window-buffer sidecar)
+                (copy-marker side-start))
+              (pi-annotate--review-sync-gen review)
+              (pi-annotate--review-layout-gen review))))))
 
-(defun pi-annotate--window-row-at (review window position)
-  "Return the display row of POSITION as shown in WINDOW of REVIEW.
-Both buffers are in row space here: the reviewed file through its wrapping,
-the sidecar one row per line."
-  (if (eq (window-buffer window) (pi-annotate--review-main-buffer review))
-      (pi-annotate--row-at review position)
-    (with-current-buffer (window-buffer window)
+(defun pi-annotate--row-delta (review from to)
+  "Return the display rows between positions FROM and TO in REVIEW.
+Negative when TO is above FROM.  Only the span between the two positions is
+measured, so a scroll step costs what the step spans: `count-screen-lines'
+over a whole 1600-line buffer costs tens of milliseconds in a live window, and
+that is the cost the row table used to charge on every scroll."
+  (let ((main (pi-annotate--review-main-buffer review))
+        (window (pi-annotate--review-main-window review)))
+    (cond
+     ((or (not (number-or-marker-p from))
+          (not (number-or-marker-p to))
+          (= from to))
+      0)
+     (t
+      (with-current-buffer main
+        (let ((window (and (window-live-p window) window))
+              (forward (< from to)))
+          (* (if forward 1 -1)
+             (count-screen-lines (if forward from to)
+                                 (if forward to from)
+                                 nil window))))))))
+
+(defun pi-annotate--position-after-rows (review position rows)
+  "Return the position ROWS display rows away from POSITION in REVIEW.
+Negative ROWS moves up.  The reviewed window's own geometry is what counts, so
+the answer stays right where the reviewed file soft-wraps."
+  (let ((main (pi-annotate--review-main-buffer review))
+        (window (pi-annotate--review-main-window review)))
+    (with-current-buffer main
       (save-excursion
         (goto-char (min (max position (point-min)) (point-max)))
-        (1- (line-number-at-pos))))))
+        (vertical-motion rows (and (window-live-p window) window))
+        (point)))))
+
+(defun pi-annotate--row-gap (review window from to)
+  "Return the display rows between FROM and TO as WINDOW of REVIEW shows them.
+The sidecar is one row per line, so nothing has to be measured there; the
+reviewed file is measured only across the span between the two positions,
+which for a scroll is one screenful."
+  (if (eq (window-buffer window) (pi-annotate--review-main-buffer review))
+      (pi-annotate--row-delta review from to)
+    (- (pi-annotate--line-number (window-buffer window) to)
+       (pi-annotate--line-number (window-buffer window) from))))
 
 (defun pi-annotate--may-scroll-p (review window target)
   "Return non-nil when REVIEW's WINDOW can be scrolled to TARGET safely.
 The window the user is working in is only moved while its point would stay on
 screen: scrolling it away from the cursor would take the note being typed out
-of view, and the next keystroke would land on a line the user cannot see."
+of view, and the next keystroke would land on a line the user cannot see.
+Point and target are both measured from the window's own start, so the test
+needs no absolute rows and no row table."
   (or (not (eq window (selected-window)))
-      (let ((height (window-body-height window))
-            (point-row (pi-annotate--window-row-at review window (window-point window)))
-            (target-row (pi-annotate--window-row-at review window target)))
-        (and (<= target-row point-row)
-             (< point-row (+ target-row height))))))
+      (let* ((height (window-body-height window))
+             (start (window-start window))
+             (point-gap (pi-annotate--row-gap review window start
+                                            (window-point window)))
+             (target-gap (pi-annotate--row-gap review window start target)))
+        (and (<= target-gap point-gap)
+             (< point-gap (+ target-gap height))))))
 
 (defun pi-annotate--set-start (window position)
   "Make WINDOW start at POSITION.
@@ -1211,29 +1265,69 @@ range is moved into view by redisplay itself."
   (unless (eql (window-start window) position)
     (set-window-start window position)))
 
+(defun pi-annotate--sync-current-p (review)
+  "Return non-nil when the recorded sync pair can still be measured from.
+The pair is a position in each buffer plus the layout generation it was taken
+in.  An edit or a resize moves the rows under those positions, and a stale
+pair would then apply a delta measured in rows that no longer exist."
+  (and (markerp (pi-annotate--review-sync-main-mark review))
+       (marker-position (pi-annotate--review-sync-main-mark review))
+       (markerp (pi-annotate--review-sync-side-mark review))
+       (marker-position (pi-annotate--review-sync-side-mark review))
+       (eql (pi-annotate--review-sync-gen review)
+            (pi-annotate--review-layout-gen review))))
+
 (defun pi-annotate--follow-main (review)
-  "Put REVIEW's sidecar window on the row its reviewed window starts on."
+  "Put REVIEW's sidecar window on the row its reviewed window starts on.
+The step is taken as a delta from the pair the last sync agreed on rather than
+as an absolute row: one sidecar line is one row of the reviewed file, so the
+sidecar moves by the rows the reviewed window moved by.  A delta is also the
+honest answer while the padding is stale, which is the whole interval between
+a change and the redraw that re-pads the sidecar."
   (let ((main (pi-annotate--review-main-window review))
         (sidecar (pi-annotate--review-sidecar-window review)))
-    (let* ((row (pi-annotate--row-at review (window-start main)))
-           (buffer (window-buffer sidecar))
+    (let* ((buffer (window-buffer sidecar))
+           (recorded-main (pi-annotate--review-sync-main-mark review))
+           (recorded-side (pi-annotate--review-sync-side-mark review))
            ;; the sidecar is padded to the height of the reviewed file, but a
            ;; stale one may still be shorter: stop at its last line
-           (line (max 1 (min (1+ row) (pi-annotate--line-count buffer))))
+           (line (max 1 (min (if (pi-annotate--sync-current-p review)
+                                 (+ (pi-annotate--line-number
+                                     buffer (marker-position recorded-side))
+                                    (pi-annotate--row-delta
+                                     review recorded-main (window-start main)))
+                               ;; no pair to measure from: the first sync of a
+                               ;; review, or the first one after an edit or a
+                               ;; resize, where the row table is stale anyway
+                               ;; and has to be rebuilt sooner or later
+                               (1+ (pi-annotate--row-at
+                                   review (window-start main))))
+                           (pi-annotate--line-count buffer))))
            (target (pi-annotate--line-position buffer line)))
       (when (pi-annotate--may-scroll-p review sidecar target)
         (pi-annotate--set-start sidecar target)
         t))))
 
 (defun pi-annotate--follow-sidecar (review)
-  "Put REVIEW's reviewed window on the row its sidecar window starts on."
+  "Put REVIEW's reviewed window on the row its sidecar window starts on.
+The mirror of `pi-annotate--follow-main': the reviewed window moves by as many
+display rows as the sidecar moved lines, measured with `vertical-motion' from
+the position the last sync agreed on."
   (let ((main (pi-annotate--review-main-window review))
         (sidecar (pi-annotate--review-sidecar-window review)))
-    (let* ((line (pi-annotate--line-number (window-buffer sidecar)
-                                          (window-start sidecar)))
-           ;; the sidecar shows one row per line, so its line names the row;
-           ;; that row may begin part way along a soft-wrapped line
-           (target (pi-annotate--position-at-row review (max 0 (1- line)))))
+    (let* ((buffer (window-buffer sidecar))
+           (line (pi-annotate--line-number buffer (window-start sidecar)))
+           (recorded-main (pi-annotate--review-sync-main-mark review))
+           (recorded-side (pi-annotate--review-sync-side-mark review))
+           (target
+            (if (pi-annotate--sync-current-p review)
+                (pi-annotate--position-after-rows
+                 review recorded-main
+                 (- line (pi-annotate--line-number
+                          buffer (marker-position recorded-side))))
+              ;; the sidecar shows one row per line, so its line names the row;
+              ;; that row may begin part way along a soft-wrapped line
+              (pi-annotate--position-at-row review (max 0 (1- line))))))
       (when (pi-annotate--may-scroll-p review main target)
         (pi-annotate--set-start main target)
         t))))
@@ -1537,11 +1631,18 @@ deletion matches the range the marker names."
     (message "pi-annotate: annotation removed")))
 
 (defun pi-annotate-redraw ()
-  "Re-read the anchors and redraw the review."
+  "Re-read the anchors, redraw the review and line the windows up again.
+Re-padding moves every note under the sidecar window, so the pair the scroll
+sync last agreed on no longer describes what is on screen.  Re-aligning here,
+against the row table the re-pad just built, keeps the next scroll on the
+cheap delta path instead of making it pay for an absolute mapping."
   (interactive)
   (let ((review pi-annotate--review))
     (pi-annotate--relayout review)
-    (pi-annotate--render review)))
+    (pi-annotate--render review)
+    (when (and (pi-annotate--active-p)
+               (pi-annotate--follow-main review))
+      (pi-annotate--record-sync review))))
 
 ;;;; Ending the review
 
@@ -1620,7 +1721,15 @@ deletion matches the range the marker names."
   (pi-annotate--finish "aborted"))
 
 (defun pi-annotate--after-change (&rest _)
-  "Note that a review buffer changed and schedule a redraw."
+  "Note that a review buffer changed and schedule a redraw.
+A change moves rows: text typed above a note pushes it down, and the padding
+\=\`pi-annotate--relayout' inserts does the same.  The scroll sync's delta is
+measured against the pair the last sync agreed on, so it is only valid while
+those rows stand still; this is what retires it, and the next sync then maps
+the row the absolute way once, from a row table that a change invalidates
+anyway."
+  (when (pi-annotate--active-p)
+    (cl-incf (pi-annotate--review-layout-gen pi-annotate--review)))
   (pi-annotate--schedule))
 
 (defun pi-annotate--buffer-killed ()
@@ -1699,8 +1808,10 @@ deletion matches the range the marker names."
 (defun pi-annotate--window-size-changed (&rest _)
   "Arrange a redraw after the review windows change size.
 The rules in the sidecar are drawn to the window width, so a resize leaves
-them too long or too short until the next redraw."
+them too long or too short until the next redraw, and it changes how many rows
+the reviewed file takes, so the row delta of the last sync no longer holds."
   (when (pi-annotate--active-p)
+    (cl-incf (pi-annotate--review-layout-gen pi-annotate--review))
     (pi-annotate--schedule)))
 
 ;;;###autoload
@@ -1722,6 +1833,8 @@ Called by pi's /annotate command through `emacsclient --eval'."
                   :style style
                   :blocks nil :anchors nil :marks nil :decorations nil
                   :sync-main nil :sync-side nil
+                  :sync-main-mark nil :sync-side-mark nil
+                  :sync-gen 0 :layout-gen 0
                   :rows nil :rows-key nil :rows-total nil
                   :next-id 1 :active-id nil :last-id nil :ended nil)))
     (unless (file-readable-p main-path)
