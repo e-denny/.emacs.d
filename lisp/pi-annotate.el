@@ -29,9 +29,11 @@
 ;; rule above and below it, aligned with the text it refers to.  Alignment and
 ;; scroll sync both count the screen rows of the reviewed window rather than its
 ;; line numbers, so a paragraph that soft-wraps still puts its notes on the
-;; rows they belong to.  The note itself is plain text, so the cursor in it
-;; behaves like any other cursor.  The sidecar stays a plain Markdown/Org file
-;; on disk: the rules are text.
+;; rows they belong to.  The pair of windows is looked up again on every sync,
+;; so a review keeps following its text even after a restored window layout
+;; has destroyed the panes it opened in.  The note itself is plain text, so the
+;; cursor in it behaves like any other cursor.  The sidecar stays a plain
+;; Markdown/Org file on disk: the rules are text.
 ;;
 ;; On finish the sidecar is written and its path is reported back to pi through
 ;; the result file named by the extension, which then hands the annotations to
@@ -1127,6 +1129,10 @@ The previous window layout is remembered and put back when the review ends."
     ;; a negative SIZE gives the *new* (right-hand) window that many columns
     (setq sidecar-window (split-window-right (- (pi-annotate--sidecar-width))))
     (set-window-buffer sidecar-window sidecar)
+    ;; Both panes are marked, so anything that manages workspaces -- a tab per
+    ;; project, say -- can leave the pair where it is: the review deliberately
+    ;; shows the reviewed file, which may belong to another project, beside its
+    ;; notes, in the tab the review was opened from.
     (set-window-parameter main-window 'pi-annotate t)
     (set-window-parameter sidecar-window 'pi-annotate t)
     (setf (pi-annotate--review-main-window review) main-window
@@ -1277,6 +1283,94 @@ pair would then apply a delta measured in rows that no longer exist."
        (eql (pi-annotate--review-sync-gen review)
             (pi-annotate--review-layout-gen review))))
 
+(defun pi-annotate--window-rank (window)
+  "Rank WINDOW as a place for one of the review's two panes.
+Higher is better: the selected window first, so the pane the user is looking
+at is the one adopted, then the larger window."
+  (+ (if (eq window (selected-window)) 1000000 0)
+     (/ (* (window-total-width window) (window-total-height window)) 1000.0)))
+
+(defun pi-annotate--frame-showing-both (review)
+  "Return a frame that displays both of REVIEW's buffers, or nil.
+The selected frame is tried first.  A frame showing only one of the two cannot
+be the review's: adopting it would put the panes in different frames -- one
+workspace's text beside another workspace's notes -- which is worse than not
+syncing at all."
+  (let ((main-buffer (pi-annotate--review-main-buffer review))
+        (sidecar-buffer (pi-annotate--review-sidecar-buffer review)))
+    (cl-find-if (lambda (frame)
+                  (and (get-buffer-window main-buffer frame)
+                       (get-buffer-window sidecar-buffer frame)))
+                (cons (window-frame (selected-window)) (frame-list)))))
+
+(defun pi-annotate--adopt-window (buffer current frame)
+  "Return a window of FRAME displaying BUFFER, preferring CURRENT.
+CURRENT is the window the review records for BUFFER, and is kept for as long
+as it is live, in FRAME, and still displays BUFFER.  Otherwise the windows of
+FRAME displaying BUFFER are ranked by `pi-annotate--window-rank'.  Nil when
+FRAME is nil or displays BUFFER nowhere: a review's two panes belong to one
+frame, so a window in another frame is never adopted."
+  (cond
+   ((and (window-live-p current)
+         (eq (window-frame current) frame)
+         (eq (window-buffer current) buffer))
+    current)
+   (frame
+    (let ((windows (get-buffer-window-list buffer nil frame)))
+      (when windows
+        (car (sort windows
+                   (lambda (a b)
+                     (> (pi-annotate--window-rank a)
+                        (pi-annotate--window-rank b))))))))))
+
+(defun pi-annotate--resolve-windows (review)
+  "Point REVIEW at windows that actually display its two buffers.
+A review can outlive the windows it opened in: a restored window
+configuration, a session switch, a deleted frame or a `delete-other-windows'
+destroys the pair while the buffers and their hooks live on.  Looking the
+windows up again is what keeps the review syncing instead of quietly doing
+nothing; that silent nothing is a review whose panes still look open but never
+follow.
+
+Adoption never crosses frames.  The surviving recorded window names the frame
+and both panes are looked for there, so a review cannot follow its file into
+another workspace's frame; only when both recorded windows are gone is a frame
+that already displays both buffers adopted, and one that displays just one of
+them is refused rather than split.  The recorded pair is retired, so the next
+sync aligns the two panes once from the windows just adopted.  Return non-nil
+when the pair changed."
+  (let* ((main-buffer (pi-annotate--review-main-buffer review))
+         (sidecar-buffer (pi-annotate--review-sidecar-buffer review))
+         (main (pi-annotate--review-main-window review))
+         (sidecar (pi-annotate--review-sidecar-window review))
+         (main-ok (and (window-live-p main)
+                       (eq (window-buffer main) main-buffer)))
+         (sidecar-ok (and (window-live-p sidecar)
+                          (eq (window-buffer sidecar) sidecar-buffer))))
+    (unless (and main-ok sidecar-ok)
+      (let* ((frame (or (and main-ok (window-frame main))
+                        (and sidecar-ok (window-frame sidecar))
+                        (pi-annotate--frame-showing-both review)))
+             (new-main (if main-ok
+                           main
+                         (pi-annotate--adopt-window main-buffer main frame)))
+             (new-sidecar (if sidecar-ok
+                              sidecar
+                            (pi-annotate--adopt-window sidecar-buffer sidecar
+                                                       frame))))
+        (unless (and (eq new-main main) (eq new-sidecar sidecar))
+          (dolist (window (list new-main new-sidecar))
+            (when (window-live-p window)
+              (set-window-parameter window 'pi-annotate t)))
+          (setf (pi-annotate--review-main-window review) new-main
+                (pi-annotate--review-sidecar-window review) new-sidecar)
+          ;; whatever delta the old pair measured describes windows that no
+          ;; longer exist, so the recorded pair is retired;
+          ;; `pi-annotate--scroll-all' aligns the two panes once from the pair
+          ;; it adopted
+          (cl-incf (pi-annotate--review-layout-gen review))
+          t)))))
+
 (defun pi-annotate--follow-main (review)
   "Put REVIEW's sidecar window on the row its reviewed window starts on.
 The step is taken as a delta from the pair the last sync agreed on rather than
@@ -1350,6 +1444,11 @@ windows' starts with the pair recorded by the last sync, which is also what
 makes this safe to call from any of its three callers -- `post-command-hook',
 `window-scroll-functions' and `pre-redisplay-functions'.
 
+The windows the review opened in are looked up again first, because a review
+can outlive them (see `pi-annotate--resolve-windows'): following the pair the
+review *thinks* it has, after a restored layout destroyed it, is a review
+whose panes still look open and silently never follow.
+
 Comparing the actual starts rather than a remembered line means a scroll
 *inside* one soft-wrapped line still moves the sidecar; a line number does not
 change there, so a line-keyed sync froze and then jumped when the line finally
@@ -1370,37 +1469,50 @@ other two hooks left stale is corrected for the frame being painted now."
              (pi-annotate--active-p)
              (not pi-annotate--syncing))
     (let* ((review pi-annotate--review)
+           (adopted (pi-annotate--resolve-windows review))
            (main (pi-annotate--review-main-window review))
            (sidecar (pi-annotate--review-sidecar-window review)))
-      (when (and (window-live-p main) (window-live-p sidecar))
-        (let ((main-start (window-start main))
-              (side-start (window-start sidecar))
-              (was-main (pi-annotate--review-sync-main review))
-              (was-side (pi-annotate--review-sync-side review))
-              (pi-annotate--syncing t))
-          ;; A window that could not be followed -- the guard in
-          ;; `pi-annotate--may-scroll-p' keeps the cursor of a note on screen
-          ;; -- leaves the record alone, so the pair stays known to be out of
-          ;; step and the next command tries again.  Recording it anyway would
-          ;; make the two windows agree on the wrong rows for good.
-          (when
-              (cond
-               ;; the reviewed window moved -- keyboard or mouse scrolling, a
-               ;; `recenter', a jump -- so the sidecar follows it
-               ((and (not (eql main-start was-main)) (eql side-start was-side))
-                (pi-annotate--follow-main review))
-               ;; the sidecar moved -- usually the note being typed grew past
-               ;; the window -- so the reviewed text follows it
-               ((and (not (eql side-start was-side)) (eql main-start was-main))
-                (pi-annotate--follow-sidecar review))
-               ;; both moved (the first sync, a resize, a jump in both
-               ;; windows): the window the user is in leads, the reviewed file
-               ;; otherwise
-               ((or (not (eql main-start was-main)) (not (eql side-start was-side)))
-                (if (eq (selected-window) sidecar)
-                    (pi-annotate--follow-sidecar review)
-                  (pi-annotate--follow-main review))))
-            (pi-annotate--record-sync review)))))))
+        (when (and (window-live-p main) (window-live-p sidecar))
+          (let ((main-start (window-start main))
+                (side-start (window-start sidecar))
+                (was-main (pi-annotate--review-sync-main review))
+                (was-side (pi-annotate--review-sync-side review))
+                (pi-annotate--syncing t))
+            ;; A window that could not be followed -- the guard in
+            ;; `pi-annotate--may-scroll-p' keeps the cursor of a note on screen
+            ;; -- leaves the record alone, so the pair stays known to be out of
+            ;; step and the next command tries again.  Recording it anyway
+            ;; would make the two windows agree on the wrong rows for good.
+            (when
+                (cond
+                 ;; the pair was just adopted from whatever windows display the
+                 ;; buffers now: nothing recorded describes them, so the
+                 ;; reviewed file is the reference -- unless the user is
+                 ;; working in the comments, whose row is then the meaningful
+                 ;; one
+                 (adopted
+                  (if (eq (selected-window) sidecar)
+                      (pi-annotate--follow-sidecar review)
+                    (pi-annotate--follow-main review)))
+                 ;; the reviewed window moved -- keyboard or mouse scrolling,
+                 ;; a `recenter', a jump -- so the sidecar follows it
+                 ((and (not (eql main-start was-main))
+                       (eql side-start was-side))
+                  (pi-annotate--follow-main review))
+                 ;; the sidecar moved -- usually the note being typed grew past
+                 ;; the window -- so the reviewed text follows it
+                 ((and (not (eql side-start was-side))
+                       (eql main-start was-main))
+                  (pi-annotate--follow-sidecar review))
+                 ;; both moved (the first sync, a resize, a jump in both
+                 ;; windows): the window the user is in leads, the reviewed
+                 ;; file otherwise
+                 ((or (not (eql main-start was-main))
+                      (not (eql side-start was-side)))
+                  (if (eq (selected-window) sidecar)
+                      (pi-annotate--follow-sidecar review)
+                    (pi-annotate--follow-main review))))
+              (pi-annotate--record-sync review)))))))
 
 ;;;; Active annotation tracking
 
@@ -1487,6 +1599,10 @@ other two hooks left stale is corrected for the frame being painted now."
 
 (defun pi-annotate--goto-note (review id)
   "Move the cursor into annotation ID's note in REVIEW."
+  ;; a review can outlive the windows it opened in (see
+  ;; `pi-annotate--resolve-windows'), and jumping is the one command that has
+  ;; to work from the reviewed file even when the panes were rearranged
+  (pi-annotate--resolve-windows review)
   (let ((block (cl-find id (pi-annotate--review-blocks review)
                         :key #'pi-annotate--block-id)))
     (when block
@@ -1503,6 +1619,7 @@ other two hooks left stale is corrected for the frame being painted now."
 
 (defun pi-annotate--goto-text (review id)
   "Move the cursor to annotation ID's span in REVIEW's reviewed file."
+  (pi-annotate--resolve-windows review)
   (let ((region (pi-annotate--anchor-region review id))
         (window (pi-annotate--review-main-window review)))
     (when (and region (window-live-p window))
