@@ -541,49 +541,53 @@ window without point in it."
          (paragraphs nil))
     (with-current-buffer buffer
       (save-excursion
-        (goto-char (point-min))
-        (while (not (eobp))
-          (let* ((line-start (line-beginning-position))
-                 (line-end (line-end-position))
-                 (text (buffer-substring-no-properties line-start line-end))
-                 (match (pi-annotate--match-marker text)))
-            (if (null match)
-                (forward-line 1)
-              (cl-destructuring-bind (id sl sc el ec kind) match
-                ;; the body runs until the block's end marker
-                (let ((body-start (min (point-max) (1+ line-end)))
-                      (end-start nil)
-                      (end-end nil))
-                  (save-excursion
-                    (forward-line 1)
-                    (catch 'found
-                      (while (not (eobp))
-                        (let ((candidate-start (line-beginning-position))
-                              (candidate-end (line-end-position)))
-                          (when (pi-annotate--match-end-marker
-                                 (buffer-substring-no-properties candidate-start candidate-end))
-                            (setq end-start candidate-start
-                                  end-end candidate-end)
-                            (throw 'found t)))
-                        (forward-line 1))))
-                  (let ((body-end (or end-start (point-max))))
-                    (unless (= body-start body-end)
-                      (setq body-end (1- body-end))) ; drop the last newline
-                    (push (pi-annotate--block-create
-                           :id id :kind kind
-                           :marker-start (copy-marker line-start)
-                           :marker-end (copy-marker line-end)
-                           :body-start (copy-marker body-start)
-                           :body-end (copy-marker body-end)
-                           :end-start (and end-start (copy-marker end-start))
-                           :end-end (and end-end (copy-marker end-end t)))
-                          blocks)
-                    (push (cons id (list sl sc el ec)) paragraphs)
-                    (setq max-id (max max-id id))
-                    ;; continue after the block
-                    (goto-char (or (and end-end (min (point-max) (1+ end-end)))
-                                   (point-max))))))))
-          ))
+        (save-restriction
+          ;; the tail is blank padding, and on a long reviewed file it outnumbers
+          ;; the notes many times over: nothing can be parsed there, so the parse
+          ;; never walks it
+          (narrow-to-region (point-min) (pi-annotate--written-end buffer))
+          (goto-char (point-min))
+          (while (not (eobp))
+            (let* ((line-start (line-beginning-position))
+                   (line-end (line-end-position))
+                   (text (buffer-substring-no-properties line-start line-end))
+                   (match (pi-annotate--match-marker text)))
+              (if (null match)
+                  (forward-line 1)
+                (cl-destructuring-bind (id sl sc el ec kind) match
+                  ;; the body runs until the block's end marker
+                  (let ((body-start (min (point-max) (1+ line-end)))
+                        (end-start nil)
+                        (end-end nil))
+                    (save-excursion
+                      (forward-line 1)
+                      (catch 'found
+                        (while (not (eobp))
+                          (let ((candidate-start (line-beginning-position))
+                                (candidate-end (line-end-position)))
+                            (when (pi-annotate--match-end-marker
+                                   (buffer-substring-no-properties candidate-start candidate-end))
+                              (setq end-start candidate-start
+                                    end-end candidate-end)
+                              (throw 'found t)))
+                          (forward-line 1))))
+                    (let ((body-end (or end-start (point-max))))
+                      (unless (= body-start body-end)
+                        (setq body-end (1- body-end))) ; drop the last newline
+                      (push (pi-annotate--block-create
+                             :id id :kind kind
+                             :marker-start (copy-marker line-start)
+                             :marker-end (copy-marker line-end)
+                             :body-start (copy-marker body-start)
+                             :body-end (copy-marker body-end)
+                             :end-start (and end-start (copy-marker end-start))
+                             :end-end (and end-end (copy-marker end-end t)))
+                            blocks)
+                      (push (cons id (list sl sc el ec)) paragraphs)
+                      (setq max-id (max max-id id))
+                      ;; continue after the block
+                      (goto-char (or (and end-end (min (point-max) (1+ end-end)))
+                                     (point-max)))))))))))
       (setf (pi-annotate--review-blocks review) (nreverse blocks)
             (pi-annotate--review-next-id review) (1+ max-id))
       ;; anchors: keep the live markers of annotations we already track, and
@@ -897,8 +901,10 @@ Return non-nil when the buffer text changed."
   "Return REVIEW's sidecar as a vector of lines, padded for alignment.
 Each note opens on the display row of the text it annotates, so notes stay
 beside their text even where the reviewed file soft-wraps.  The tail is padded
-to the height of the reviewed file and to a screenful past the last note, so
-the windows keep scrolling together while there is still a note to show."
+to the full height of the reviewed file, so the two windows keep scrolling
+together from the first row to the last -- reading on past the final note still
+moves the comments, which is what a reviewer reading a chapter straight through
+wants."
   (pi-annotate--rows review)
   (let* ((style (pi-annotate--review-style review))
          (width (pi-annotate--rule-width review))
@@ -937,15 +943,13 @@ the windows keep scrolling together while there is still a note to show."
             (setq count (1+ count))
             (push "" lines)
             (setq count (1+ count))))))
-    ;; Keep the sidecar as tall as the reviewed file, but no taller than a
-    ;; screen past the last note: a file reviewed only at its top would
-    ;; otherwise pad the sidecar with thousands of lines that no note will
-    ;; ever sit beside, and every edit would rewrite them.
-    (let* ((window (pi-annotate--review-sidecar-window review))
-           (height (if (window-live-p window) (window-body-height window) 40))
-           (limit (max 1 (min (pi-annotate--review-rows-total review)
-                              (+ count height)))))
-      (while (< count limit)
+    ;; Keep the sidecar as tall as the reviewed file.  Padding past the last
+    ;; note is not wasted: it is what lets the comments window follow the text
+    ;; the whole way down instead of stopping where the notes stop.  The cost
+    ;; is a longer buffer to re-pad, and `pi-annotate--apply-lines' keeps that
+    ;; to the tail that actually changed rather than the file.
+    (let* ((total (max 1 (pi-annotate--review-rows-total review))))
+      (while (< count total)
         (push "" lines)
         (setq count (1+ count))))
     (vconcat (nreverse lines))))
@@ -1075,16 +1079,16 @@ Return non-nil when any marker line changed."
   "Return the position just past BUFFER's last non-blank line.
 The blank lines after it only pad the buffer out to the height of the
 reviewed file, so the two windows scroll together; they are not part of the
-sidecar on disk."
+sidecar on disk.  Whitespace is skipped backwards in one step: the padding is
+a long run of blank lines, and walking it a line at a time cost more than the
+parse that asked for the bound."
   (with-current-buffer buffer
     (save-excursion
       (goto-char (point-max))
-      (let ((end nil))
-        (while (and (null end) (> (point) (point-min)))
-          (forward-line -1)
-          (unless (looking-at-p "[ \t]*$")
-            (setq end (min (point-max) (1+ (line-end-position))))))
-        (or end (point-min))))))
+      (skip-chars-backward " \t\n")
+      (if (bobp)
+          (point-min)
+        (min (point-max) (1+ (line-end-position)))))))
 
 (defun pi-annotate--save (review)
   "Write REVIEW's sidecar (and its reviewed file when it is modified)."
