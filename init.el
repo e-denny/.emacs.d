@@ -545,6 +545,26 @@ for the whole of a command, and nil in a timer or a filter."
          ("M-<down>" . windmove-down)))
 
 ;; ----------------------------------------------------------------------
+;; scrolling
+;; ----------------------------------------------------------------------
+
+;; Point moves by one line, so the window should move by one line too.  With
+;; the stock values (`scroll-conservatively' and `scroll-step' both 0)
+;; redisplay recentres point the moment it leaves the window: that recentring
+;; is the several-line jump at the bottom edge.  `scroll-conservatively' 101
+;; scrolls by the minimum that brings point back into view -- one line per
+;; line of cursor motion -- and, because it is over 100, never recentres, so
+;; even a jump to a distant position lands point near the edge it came from
+;; rather than in the middle of the window.  `scroll-step' is consulted only
+;; when `scroll-conservatively' is 0, so it is left at 0 for the record.
+(setq scroll-conservatively 101
+      scroll-step 0
+      ;; Move the window while point still has two lines below it (and two
+      ;; above it at the top), so the scroll begins before the cursor reaches
+      ;; the edge and the lines ahead of it stay on screen.
+      scroll-margin 2)
+
+;; ----------------------------------------------------------------------
 ;; theme
 ;; ----------------------------------------------------------------------
 
