@@ -1433,44 +1433,85 @@ the position the last sync agreed on."
 (defun pi-annotate--pre-redisplay (&optional _window)
   "Make the follower right before the window about to be painted is laid out.
 `window-scroll-functions' does the same job one window earlier, while the
-window that scrolled is being laid out, and a start given to the *other*
-window at that point does not repaint it by itself (see
-`pi-annotate--repaint-follower').  This hook runs before each window of the
-review is laid out, so a start the sync fixed here is the one used when the
+window that scrolled is being laid out, so a start fixed there is only painted
+if the pass was asked to cover this window too (see
+`pi-annotate--prepare-redisplay').  This hook runs before each window of the
+review is laid out, so a start the sync fixes here is the one used when the
 sidecar is reached."
   (pi-annotate--scroll-all))
 
-(defun pi-annotate--repaint-follower (main sidecar main-start side-start)
-  "Ask for a repaint when the sync just moved a window the user is not in.
-Emacs does not redisplay the whole frame after every command: unless something
-outside a window changed, redisplay rebuilds the *selected* window only (see
-`redisplay_internal', the `!consider_all_windows_p' branch).  A follower
-moved from `window-scroll-functions' or `pre-redisplay-functions' is
-therefore marked by `set-window-start' but not painted: its new start waits
-for the next frame-wide redisplay, which on a held arrow key is the next key.
-The comments window then sits one keystroke behind however fast the review is
-scrolled, and catches up only once the scrolling stops.
+(defun pi-annotate--scrolls-on-redisplay-p (review window)
+  "Return non-nil when redisplay is likely to scroll WINDOW because of point.
+`scroll-conservatively' does not scroll a window when the command runs: it
+scrolls it while the window is being laid out, once point has come within
+`scroll-margin' lines of an edge, and recenters it there as well when point
+ends up off the window.  This looks at the same facts the display engine is
+about to look at -- the row point is on, the height of the window, the margin
+that applies in its buffer, and whether the window is already half scrolled --
+so a caller can tell, before that redisplay, whether a scroll is coming."
+  (and (windowp window)
+       (window-live-p window)
+       (with-current-buffer (window-buffer window)
+         (let* ((height (window-body-height window))
+                (margin (or scroll-margin 0))
+                (gap (pi-annotate--row-gap review window
+                                           (window-start window)
+                                           (window-point window))))
+           (or (<= gap margin)
+               ;; the engine scrolls as soon as point is inside the margin,
+               ;; which includes the row it starts on
+               (>= gap (- height 1 margin))
+               ;; and a window that is already scrolled by part of a line,
+               ;; which is how `line-move-partial' keeps the last line in
+               ;; view, is about to be scrolled by a whole one
+               (> (window-vscroll window t) 0))))))
 
-`force-window-update' sets the frame-wide flag, and redisplay checks that flag
-at the end of the pass and starts over, so the follower is painted within the
-same command.  It is only worth that second pass when the moved window is not
-the selected one -- a selected window is rebuilt in this pass anyway -- and
-when this call came from redisplay at all, since `post-command-hook' runs
-before the pass that will paint the result."
-  (when (or (and (not (eql (window-start main) main-start))
-                 (not (eq main (selected-window))))
-            (and (not (eql (window-start sidecar) side-start))
-                 (not (eq sidecar (selected-window)))))
+(defun pi-annotate--moved-follower-p (main sidecar main-start side-start)
+  "Non-nil when the sync just moved a window other than the selected one.
+START arguments are the two starts from before the sync ran."
+  (or (and (window-live-p main)
+           (not (eql (window-start main) main-start))
+           (not (eq main (selected-window))))
+      (and (window-live-p sidecar)
+           (not (eql (window-start sidecar) side-start))
+           (not (eq sidecar (selected-window))))))
+
+(defun pi-annotate--prepare-redisplay (review main sidecar main-start side-start)
+  "Ask for a frame-wide redisplay when this command left a pane unpainted.
+The command loop redisplays the selected window alone unless something outside
+a window asked for more (see `redisplay_internal', the
+`!consider_all_windows_p' branch).  Two things make the review need the rest of
+the frame, and neither shows up before the command has run:
+
+* a scroll the display engine is about to perform.  `scroll-conservatively'
+  does not scroll when the command runs; it scrolls while laying the window
+  out, once point has come within `scroll-margin' lines of an edge.  The
+  comments window is only started from `window-scroll-functions' afterwards, in
+  that same pass, so unless the pass covers both panes its new start is
+  recorded and not painted -- the comments sit one keystroke behind, and a
+  trace of a review in that state shows it: eighty-eight layouts of the
+  reviewed window against twelve of the comments window, none of them during a
+  one-second burst of arrow keys, the pane laid out once after the burst and
+  catching up.
+
+* a follower this hook just moved, when the command scrolled the reviewed
+  window outright (`C-v', a wheel event, `line-move-partial' below a
+  `scroll-conservatively' of 0).
+
+The request has to be made here, before that redisplay: one made from inside
+it is wiped before redisplay tests for it -- `windows_or_buffers_changed' is
+cleared before the retry decision -- which is why asking from the scroll hook
+itself did nothing but cost a call."
+  (when (or (pi-annotate--moved-follower-p main sidecar main-start side-start)
+            (pi-annotate--scrolls-on-redisplay-p review (selected-window)))
     (force-window-update)))
 
-(defun pi-annotate--scroll-all (&optional window _new-start)
+(defun pi-annotate--scroll-all (&optional _window _new-start)
   "Keep REVIEW's two windows on the same screen row.
-NEW-START is ignored: the follower is chosen by comparing the two windows'
-starts with the pair recorded by the last sync, which is also what makes this
-safe to call from any of its three callers -- `post-command-hook',
-`window-scroll-functions' and `pre-redisplay-functions'.  WINDOW, when given,
-says the call came from redisplay, which decides whether the follower has to
-be asked for explicitly (see `pi-annotate--repaint-follower').
+WINDOW and NEW-START are ignored: the follower is chosen by comparing the two
+windows' starts with the pair recorded by the last sync, which is also what
+makes this safe to call from any of its three callers -- `post-command-hook',
+`window-scroll-functions' and `pre-redisplay-functions'.
 
 The windows the review opened in are looked up again first, because a review
 can outlive them (see `pi-annotate--resolve-windows'): following the pair the
@@ -1489,11 +1530,11 @@ the earliest point to follow it, and the redisplay that follows paints both
 windows.  A scroll Emacs performs *while displaying*, which is what the arrow
 keys do at the window edge once `scroll-conservatively' is set, grows no start
 until redisplay lays the window out, so it is caught by
-`window-scroll-functions' -- and because that pass rebuilds the selected
-window only, the follower is marked and repainted on the spot
-(`pi-annotate--repaint-follower').  Finally, `pre-redisplay-functions' runs
-before each of the review's windows is laid out, so a start the sync fixes
-while the frame is being painted is never left for the next event."
+`window-scroll-functions' -- with `pi-annotate--prepare-redisplay' having made
+sure that pass covers the comments window too.  Finally,
+`pre-redisplay-functions' runs before each of the review's windows is laid
+out, so a start the sync fixes while the frame is being painted is never left
+for the next event."
   (when (and pi-annotate-scroll-sync
              (pi-annotate--active-p)
              (not pi-annotate--syncing))
@@ -1541,10 +1582,7 @@ while the frame is being painted is never left for the next event."
                   (if (eq (selected-window) sidecar)
                       (pi-annotate--follow-sidecar review)
                     (pi-annotate--follow-main review))))
-              (pi-annotate--record-sync review)
-              (when window
-                (pi-annotate--repaint-follower
-                 main sidecar main-start side-start))))))))
+              (pi-annotate--record-sync review)))))))
 
 ;;;; Active annotation tracking
 
@@ -1565,8 +1603,18 @@ while the frame is being painted is never left for the next event."
   (when (pi-annotate--active-p)
     (pi-annotate--update-active)
     ;; syncing here, before redisplay, is what keeps the follower window from
-    ;; showing the old position for a frame after a scroll
-    (pi-annotate--scroll-all)))
+    ;; showing the old position for a frame after a scroll the command itself
+    ;; performed; a scroll redisplay is about to perform needs the pass to
+    ;; cover both panes (see `pi-annotate--prepare-redisplay')
+    (let* ((review pi-annotate--review)
+           (main (pi-annotate--review-main-window review))
+           (sidecar (pi-annotate--review-sidecar-window review))
+           (main-start (and (window-live-p main) (window-start main)))
+           (side-start (and (window-live-p sidecar) (window-start sidecar))))
+      (pi-annotate--scroll-all)
+      (when pi-annotate-scroll-sync
+        (pi-annotate--prepare-redisplay review main sidecar
+                                        main-start side-start)))))
 
 ;;;; Change hooks and redraw scheduling
 
