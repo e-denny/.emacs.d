@@ -669,6 +669,27 @@ taken over by the window that displays it."
                    (and (string-match-p regexp (buffer-name buffer)) t))
                  my-tabs-side-panel-buffer-names)))
 
+;; A review is the same problem from the other side: pi-annotate deliberately
+;; shows a file from another project beside the notes that belong to it, in
+;; the tab the review was opened from.  Following the file's project would move
+;; the text to that project's tab and leave the notes behind in the one the
+;; review was opened in -- two panes in two workspaces, no longer side by side.
+;; The package marks both of its windows with a window parameter, so a window
+;; that carries one belongs to whichever workspace it is shown in, whatever its
+;; buffer's project says.
+(defcustom my-tabs-window-exempt-parameters '(pi-annotate)
+  "Window parameters that keep a window out of the workspace rules.
+A window carrying one of these belongs to the tab it is shown in, even when
+its buffer belongs to another project.  Set by a package that shows buffers
+of several projects together and has to keep them together."
+  :type '(repeat symbol)
+  :group 'tab-line)
+
+(defun my-tabs--exempt-window-p (window)
+  "Non-nil when WINDOW's workspace rules are its own."
+  (seq-some (lambda (parameter) (window-parameter window parameter))
+            my-tabs-window-exempt-parameters))
+
 (defun my-tabs--workspace-buffer-p (buffer)
   "Non-nil when BUFFER is a buffer a tab may show.
 Internal buffers, the ones drawn with a leading space (the minibuffer
@@ -855,12 +876,17 @@ it is selected."
   "Keep one buffer to one window, and the frame on the buffer's workspace.
 When the selected window shows a buffer of another project, the frame
 moves to that project's tab and shows the buffer there; a buffer another
-window of the tab already owns moves to the window that selected it."
+window of the tab already owns moves to the window that selected it.
+A window a package has exempted (see `my-tabs-window-exempt-parameters')
+is left where it is: a review shows two projects' buffers side by side on
+purpose, and moving one of them to its own tab would take it away from the
+other."
   (unless my-tabs--reconciling
     (let ((window (selected-window)))
       (when (and (windowp window)
                  (not (window-minibuffer-p window))
-                 (null (window-parameter window 'window-side)))
+                 (null (window-parameter window 'window-side))
+                 (not (my-tabs--exempt-window-p window)))
         (let* ((buffer (window-buffer window))
                (workspace (my-tabs--workspace buffer))
                (tab (my-tabs--tab-workspace (window-frame window))))
