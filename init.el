@@ -589,6 +589,17 @@ enabled, and the older one's faces show through where the newer has none."
   (load-theme 'doom-one :no-confirm)
   :bind (("C-c t" . my-toggle-theme)))
 
+;; ef-themes -- declared and kept installed, but not loaded: `doom-one' is the
+;; theme the kitty palette is built around, and the ef collection stays one
+;; `M-x load-theme' away (ef-dark, ef-light, ef-night, ef-day, ef-winter,
+;; ef-summer, the deuteranopia pairs, ...) for a palette that does not have to
+;; agree with the terminal. Pulling one in here would leave two themes enabled
+;; unless the doom one is disabled first, which is what `my-toggle-theme' does
+;; for its own pair. The collection is built on modus-themes, so `:ensure' of
+;; this one keeps that dependency installed too.
+(use-package ef-themes
+  :ensure t)
+
 ;; ----------------------------------------------------------------------
 ;; cursor and current line
 ;; ----------------------------------------------------------------------
