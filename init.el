@@ -568,6 +568,44 @@ for the whole of a command, and nil in a timer or a filter."
 ;; theme
 ;; ----------------------------------------------------------------------
 
+;; The theme loaded at startup is the one `my-themes' last chose, recorded in
+;; `my-theme-file': one line of state, not an edit to this file, so choosing a
+;; theme never rewrites the configuration. The word `default' there means no
+;; theme at all, for a session that wants the built-in faces. `C-c t' only
+;; flips the running session and does not write the file -- the recorded choice
+;; is the explicit one.
+(defconst my-theme-file (expand-file-name "theme" user-emacs-directory)
+  "File recording the theme `my-themes' last chose.")
+
+(defun my-themes--saved ()
+  "Return the theme recorded in `my-theme-file', or nil when none is.
+`string-trim' would be the obvious tool but lives in `subr-x', which this file
+never loads, so the whitespace is stripped with a regexp."
+  (when (file-readable-p my-theme-file)
+    (let ((name (with-temp-buffer
+                  (insert-file-contents my-theme-file)
+                  (replace-regexp-in-string "[ \t\n\r]+" "" (buffer-string)))))
+      (and (> (length name) 0) (intern name)))))
+
+(defun my-themes--save (theme)
+  "Record THEME in `my-theme-file'; the symbol `default' records no theme."
+  (with-temp-file my-theme-file
+    (insert (format "%s\n" theme))))
+
+(defun my-themes--load-saved ()
+  "Load the theme `my-themes' last chose, or `doom-one' when none is recorded.
+A recorded name can outlive the package that provided it, so a theme that will
+not load falls back to `doom-one' rather than leaving the session unstyled."
+  (let ((saved (my-themes--saved)))
+    (cond ((eq saved 'default) nil)
+          ((null saved) (load-theme 'doom-one :no-confirm))
+          (t (condition-case err
+                 (load-theme saved :no-confirm)
+               (error
+                (message "Theme %s did not load (%s); using doom-one"
+                         saved (error-message-string err))
+                (load-theme 'doom-one :no-confirm)))))))
+
 ;; doom-themes -- `doom-one' is the Doom One palette kitty runs (see
 ;; ~/.config/kitty/current-theme.conf): background #282c34, foreground
 ;; #bbc2cf, and the same 16 ANSI colors. `doom-one-light' is its light
@@ -586,7 +624,7 @@ enabled, and the older one's faces show through where the newer has none."
 (use-package doom-themes
   :ensure t
   :init
-  (load-theme 'doom-one :no-confirm)
+  (my-themes--load-saved)
   :bind (("C-c t" . my-toggle-theme)))
 
 ;; ef-themes -- declared and kept installed, but not loaded: `doom-one' is the
@@ -599,6 +637,96 @@ enabled, and the older one's faces show through where the newer has none."
 ;; this one keeps that dependency installed too.
 (use-package ef-themes
   :ensure t)
+
+;; A buffer of every theme on the theme load path, one line each, where RET
+;; applies the theme on that line and disables whatever was enabled before it.
+;; The built-in `customize-themes' lists themes too but it is multi-select --
+;; ticking a second theme leaves the first on, and the two blend -- and
+;; `consult-theme' lives in the minibuffer, which closes on the choice and
+;; stops previewing after the theme that has to be read from disk. This buffer
+;; stays open, so themes can be tried one after another, and each choice is
+;; exclusive: `load-theme' would otherwise add to `custom-enabled-themes'
+;; rather than replace it.
+(defconst my-themes-buffer "*Themes*"
+  "Buffer `my-themes' lists the themes in.")
+
+(defun my-themes--available ()
+  "Return (NAME SOURCE SYMBOL) for every theme file on the load path.
+The scan is the one `consult-theme' does: theme files are found per directory
+of `custom-theme--load-path', so a theme counts as available when its package
+is installed, not only when it has been loaded."
+  (let ((entries nil))
+    (dolist (dir (custom-theme--load-path))
+      (when (file-directory-p dir)
+        (let ((source (file-name-nondirectory (directory-file-name dir))))
+          (dolist (file (directory-files dir nil "-theme\\.el\\'"))
+            (let* ((name (replace-regexp-in-string "-theme\\.el\\'" "" file))
+                   (symbol (intern name)))
+              (when (custom-theme-name-valid-p symbol)
+                (push (list name source symbol) entries)))))))
+    ;; `default' is the row that turns theming off altogether
+    (cons (list "default" "" 'default)
+          (sort (delete-dups entries)
+                (lambda (a b) (string< (car a) (car b)))))))
+
+(defun my-themes--entries ()
+  "Return the `tabulated-list-entries' for `my-themes-mode'."
+  (mapcar (lambda (entry)
+            (list (nth 2 entry)
+                  (vector (nth 0 entry)
+                          (nth 1 entry)
+                          (cond ((eq (nth 2 entry) 'default)
+                                 (if custom-enabled-themes "" "active"))
+                                ((memq (nth 2 entry) custom-enabled-themes) "active")
+                                (t "")))))
+          (my-themes--available)))
+
+(defun my-themes-refresh ()
+  "Fill the theme list in again, keeping point on the same row."
+  (interactive)
+  (setq-local tabulated-list-entries (my-themes--entries))
+  (tabulated-list-print t))
+
+(defun my-themes-select ()
+  "Enable the theme on this line, disabling the theme already enabled.
+`load-theme' alone appends to `custom-enabled-themes', so the old theme stays
+and its faces show through where the new one has none; disabling first is what
+makes each choice a replacement. The row on `default' disables them all. The
+choice is written to `my-theme-file', so it is the theme the next session
+starts with."
+  (interactive)
+  (let ((theme (tabulated-list-get-id)))
+    (unless theme (user-error "No theme on this line"))
+    (mapc #'disable-theme custom-enabled-themes)
+    (unless (eq theme 'default)
+      (load-theme theme :no-confirm))
+    (my-themes--save theme)
+    (my-themes-refresh)
+    (message "Theme: %s (remembered)" (if (eq theme 'default) "none" theme))))
+
+(defvar my-themes-mode-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map tabulated-list-mode-map)
+    (define-key map (kbd "RET") #'my-themes-select)
+    (define-key map (kbd "g") #'my-themes-refresh)
+    map)
+  "Keymap for `my-themes-mode'.  `q' comes from `tabulated-list-mode-map'.")
+
+(define-derived-mode my-themes-mode tabulated-list-mode "Themes"
+  "Major mode listing the available themes.
+RET enables the theme on the line and disables the one that was enabled, so
+the list can be worked down while the buffer stays open."
+  (setq-local tabulated-list-format [("Theme" 26 t) ("Source" 24 t) ("Active" 7 t)]
+              tabulated-list-padding 2
+              tabulated-list-entries (my-themes--entries))
+  (tabulated-list-init-header))
+
+(defun my-themes ()
+  "List the available themes; RET applies the one at point."
+  (interactive)
+  (switch-to-buffer (get-buffer-create my-themes-buffer))
+  (my-themes-mode)
+  (my-themes-refresh))
 
 ;; ----------------------------------------------------------------------
 ;; cursor and current line
@@ -999,11 +1127,14 @@ which is what makes it safe on every window hook."
         (setq my-selected-window-bar--buffer wanted)
         (my-selected-window-bar--install wanted window)))))
 
-(defun my-selected-window-bar-reapply ()
+(defun my-selected-window-bar-reapply (&optional _theme)
   "Recompute the bar's colour and put it back where it belongs.
 Call this after changing `my-selected-window-bar' or
 `my-selected-window-bar-width' with a plain `setq'; Customize calls it by
-itself, and so does a theme change."
+itself, and so does a theme change.  `enable-theme-functions' is an abnormal
+hook: it calls its functions with the name of the theme that was enabled, so
+the argument is accepted and ignored -- the colour is recomputed from whatever
+faces the new theme defines."
   (interactive)
   (setq my-selected-window-bar--colour (my-selected-window-bar--preferred-colour))
   (when (facep 'my-selected-window-bar-face)
