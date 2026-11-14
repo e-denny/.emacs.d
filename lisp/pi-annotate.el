@@ -25,15 +25,19 @@
 ;;   * `C-c C q' finishes the review, `C-c C x' aborts it.
 ;;
 ;; Commented spans get a yellow background in the reviewed file, deleted spans
-;; get strikethrough, and every annotation in the sidecar is set off by a drawn
-;; rule above and below it, aligned with the text it refers to.  Alignment and
+;; get strikethrough, and every annotation in the sidecar is set off by a bar
+;; down its left edge with a tint of the same colour behind it, aligned with the
+;; text it refers to.  The marker lines that file the coordinates are text and
+;; stay in the file, but they are hidden on screen: they take no visible room
+;; and only keep the rows that put a note beside its text.  Alignment and
 ;; scroll sync both count the screen rows of the reviewed window rather than its
 ;; line numbers, so a paragraph that soft-wraps still puts its notes on the
 ;; rows they belong to.  The pair of windows is looked up again on every sync,
 ;; so a review keeps following its text even after a restored window layout
 ;; has destroyed the panes it opened in.  The note itself is plain text, so the
 ;; cursor in it behaves like any other cursor.  The sidecar stays a plain
-;; Markdown/Org file on disk: the rules are text.
+;; Markdown/Org file on disk: the markers and their rules are text, only their
+;; look on screen is ours.
 ;;
 ;; On finish the sidecar is written and its path is reported back to pi through
 ;; the result file named by the extension, which then hands the annotations to
@@ -120,8 +124,8 @@ review."
 ;;;; Faces
 ;;
 ;; The palette mirrors annotate.nvim: amber comment spans, struck-through grey
-;; deletions, and blue/red/yellow rules that brighten for the annotation under
-;; the cursor.
+;; deletions, and blue/red/yellow bars that brighten, with the note's tint, for
+;; the annotation under the cursor.
 
 (defface pi-annotate-comment
   '((((background dark)) :background "#4c4400" :foreground "#ffe58a")
@@ -155,28 +159,53 @@ review."
   '((((background dark)) :foreground "#7aa2f7")
     (((background light)) :foreground "#1e66f5")
     (t :inherit default))
-  "Face for the rules in the sidecar."
+  "Face for the bar down the side of a note in the sidecar."
   :group 'pi-annotate)
 
 (defface pi-annotate-box-comment
   '((((background dark)) :foreground "#7aa2f7" :weight bold)
     (((background light)) :foreground "#1e66f5" :weight bold)
     (t :inherit default))
-  "Face for the rules around a comment."
+  "Face for the bar down the side of a comment in the sidecar."
   :group 'pi-annotate)
 
 (defface pi-annotate-box-delete
   '((((background dark)) :foreground "#f7768e" :weight bold)
     (((background light)) :foreground "#d20f39" :weight bold)
     (t :inherit default))
-  "Face for the rules around a deletion."
+  "Face for the bar down the side of a deletion in the sidecar."
   :group 'pi-annotate)
 
 (defface pi-annotate-box-active
   '((((background dark)) :foreground "#ffd75f" :weight bold)
     (((background light)) :foreground "#b8860b" :weight bold)
     (t :inherit default))
-  "Face for the rules around the annotation at the cursor."
+  "Face for the bar down the side of the annotation at the cursor."
+  :group 'pi-annotate)
+
+;; The tint behind a note: the bar's own hue at the lightness of the frame's
+;; background, so the note reads as a coloured panel rather than as a headline.
+;; The bar itself is drawn in the `pi-annotate-box-*' colours above, which are
+;; the saturated ones; `:extend' carries the background to the window edge.
+(defface pi-annotate-tint-comment
+  '((((background dark)) :background "#283449" :extend t)
+    (((background light)) :background "#dbe7ff" :extend t)
+    (t :inherit default))
+  "Face behind a comment in the sidecar."
+  :group 'pi-annotate)
+
+(defface pi-annotate-tint-delete
+  '((((background dark)) :background "#3a2730" :extend t)
+    (((background light)) :background "#ffe1e5" :extend t)
+    (t :inherit default))
+  "Face behind a deletion in the sidecar."
+  :group 'pi-annotate)
+
+(defface pi-annotate-tint-active
+  '((((background dark)) :background "#3b3520" :extend t)
+    (((background light)) :background "#fff3c9" :extend t)
+    (t :inherit default))
+  "Face behind the annotation at the cursor."
   :group 'pi-annotate)
 
 ;;;; Source formats
@@ -287,7 +316,7 @@ many columns the rule should fill."
   blocks next-id active-id last-id
   anchors                        ; id -> (START-MARKER . END-MARKER) in main
   marks                          ; id -> highlight overlay in main
-  decorations                    ; id -> rule/highlight overlays in the sidecar
+  decorations                    ; id -> bar and tint overlays in the sidecar
   rows rows-key rows-total       ; display rows of the reviewed file's lines
   sync-main sync-side            ; window starts the two windows agree on
   sync-main-mark sync-side-mark  ; the same two starts, as markers
@@ -638,11 +667,58 @@ window without point in it."
   (max 20 (- (pi-annotate--rule-width review) 2)))
 
 (defun pi-annotate--rule-face (review id kind)
-  "Return the rule face for annotation ID of KIND in REVIEW."
+  "Return the bar face for annotation ID of KIND in REVIEW.
+The bar is drawn in this face's colour, so it is the saturated one; the tint
+behind the note is the matching `pi-annotate-tint-*' face."
   (cond
    ((eql id (pi-annotate--review-active-id review)) 'pi-annotate-box-active)
    ((string= kind "delete") 'pi-annotate-box-delete)
    (t 'pi-annotate-box-comment)))
+
+(defun pi-annotate--tint-face (review id kind)
+  "Return the face behind annotation ID of KIND in REVIEW."
+  (cond
+   ((eql id (pi-annotate--review-active-id review)) 'pi-annotate-tint-active)
+   ((string= kind "delete") 'pi-annotate-tint-delete)
+   (t 'pi-annotate-tint-comment)))
+
+(defvar pi-annotate--bar-bitmap nil
+  "Name of the fringe bitmap that draws the sidecar's bar, or nil.")
+
+(defvar pi-annotate--bar-geometry nil
+  "(FRINGE HEIGHT) the bar bitmap was defined for.")
+
+(defun pi-annotate--bar-bitmap-name (window)
+  "Return the fringe bitmap for WINDOW's left fringe, defining it if needed.
+A fringe bitmap is a solid block as wide as the fringe; the colour comes from
+the face in the display spec, so one bitmap serves every annotation colour.
+Two rows taller than the character, centred, for the same reason the selected
+window's bar is: at this display's scale a bitmap exactly one row tall leaves
+a darker seam where consecutive rows meet."
+  (let* ((frame (window-frame window))
+         (fringe (max 1 (or (car (window-fringes window)) 8)))
+         (height (frame-char-height frame))
+         (key (list fringe height)))
+    (unless (equal key pi-annotate--bar-geometry)
+      (let ((name (intern (format "pi-annotate-bar-%dx%d" height fringe))))
+        (define-fringe-bitmap name
+          (make-vector (+ height 2) (1- (ash 1 fringe)))
+          (+ height 2) fringe 'center)
+        (setq pi-annotate--bar-bitmap name
+              pi-annotate--bar-geometry key)))
+    pi-annotate--bar-bitmap))
+
+(defun pi-annotate--bar-prefix (window face)
+  "Return a `line-prefix' value putting a bar in WINDOW's fringe in FACE.
+The bar is drawn in the fringe rather than in the text, so the note keeps every
+column it was wrapped to.  A terminal has no fringe to draw in, so there it is
+the half-block glyph in the same colour, one column wide."
+  (when (and (windowp window) (window-live-p window))
+    (if (display-graphic-p (window-frame window))
+        (condition-case nil
+            (list 'left-fringe (pi-annotate--bar-bitmap-name window) face)
+          (error nil))
+      (propertize "\u258c" 'face face))))
 
 (defun pi-annotate--clear-decorations (review)
   "Remove every decoration overlay REVIEW owns."
@@ -651,27 +727,21 @@ window without point in it."
       (when (overlayp overlay) (delete-overlay overlay))))
   (setf (pi-annotate--review-decorations review) nil))
 
-(defun pi-annotate--deco-same (a b)
-  "Return non-nil when decorations A and B draw the same thing."
-  (and (= (length a) (length b))
-       (cl-every #'equal a b)))
-
 (defun pi-annotate--deco-overlays (previous specs)
   "Return overlays for SPECS, reusing those in PREVIOUS that still match.
-SPECS is a list of (START END DISPLAY FACE BEFORE-STRING).  Touching an
-overlay makes redisplay repaint its window from scratch, so an overlay whose
-position and decorations are unchanged is kept as is."
+SPECS is a list of (START END PROPERTIES), PROPERTIES an alist of the text
+properties to put on the overlay.  Touching an overlay makes redisplay repaint
+its window from scratch, so an overlay whose position and properties are
+unchanged is kept as is."
   (let ((out nil))
     (dolist (spec specs)
-      (cl-destructuring-bind (start end display face before) spec
-        (let* ((wanted (list display face before))
-               (hit (cl-find-if (lambda (overlay)
+      (cl-destructuring-bind (start end properties) spec
+        (let* ((hit (cl-find-if (lambda (overlay)
                                   (and (overlayp overlay)
                                        (eql (overlay-start overlay) start)
                                        (eql (overlay-end overlay) end)
-                                       (pi-annotate--deco-same
-                                        (overlay-get overlay 'pi-annotate-deco)
-                                        wanted)))
+                                       (equal (overlay-get overlay 'pi-annotate-deco)
+                                              properties)))
                                 previous)))
           (if hit
               (progn
@@ -680,37 +750,57 @@ position and decorations are unchanged is kept as is."
                 (setq previous (delq hit previous))
                 (push hit out))
             (let ((overlay (make-overlay start end)))
-              (overlay-put overlay 'pi-annotate-deco wanted)
-              (when display (overlay-put overlay 'display display))
-              (when face (overlay-put overlay 'face face))
-              (when before (overlay-put overlay 'before-string before))
+              (overlay-put overlay 'pi-annotate-deco properties)
+              (dolist (pair properties)
+                (overlay-put overlay (car pair) (cdr pair)))
               (push overlay out))))))
     (nreverse out)))
 
 (defun pi-annotate--deco-specs (review block)
   "Return the overlay specs that dress BLOCK of REVIEW.
-They colour the rule lines that open and close the note; the note text
-itself is left as plain text, so the cursor in it is an ordinary cursor.
-Each spec is (START END DISPLAY FACE BEFORE-STRING), the form
-`pi-annotate--deco-overlays' reads."
-  (let ((face (pi-annotate--rule-face review (pi-annotate--block-id block)
-                                        (pi-annotate--block-kind block)))
-        (specs nil))
-    (push (list (marker-position (pi-annotate--block-marker-start block))
-                (marker-position (pi-annotate--block-marker-end block))
-                nil face nil)
+The marker lines the sidecar file carries for parsing -- the coordinates and
+the closing line -- are hidden, and so is the source header; what says where a
+note begins and ends is a bar down its left edge and a tint of the bar's
+colour behind it.  Hiding the markers only takes their text away: their lines
+stay, so a note keeps the row the annotated text is on.
+
+Each spec is (START END PROPERTIES), PROPERTIES an alist of the text properties
+to put on the overlay, the form `pi-annotate--deco-overlays' reads."
+  (let* ((id (pi-annotate--block-id block))
+         (kind (pi-annotate--block-kind block))
+         (bar (pi-annotate--bar-prefix (pi-annotate--review-sidecar-window review)
+                                       (pi-annotate--rule-face review id kind)))
+         (start (marker-position (pi-annotate--block-marker-start block)))
+         (end-start (pi-annotate--block-end-start block))
+         (end (marker-position (if end-start
+                                   (pi-annotate--block-end-end block)
+                                 (pi-annotate--block-body-end block))))
+         (specs nil))
+    ;; the panel: bar on every row of the note, tint behind its text.  The
+    ;; priority keeps this prefix in front of the selected window's own bar,
+    ;; whose overlay covers the whole buffer.
+    (push (list start end
+                (append (list (cons 'face (pi-annotate--tint-face review id kind))
+                              (cons 'priority 20))
+                        (when bar (list (cons 'line-prefix bar)))))
           specs)
-    (when (pi-annotate--block-end-start block)
-      (push (list (marker-position (pi-annotate--block-end-start block))
+    ;; the marker lines: the text goes, the rows stay
+    (push (list start (marker-position (pi-annotate--block-marker-end block))
+                (list (cons 'display "")))
+          specs)
+    (when end-start
+      (push (list (marker-position end-start)
                   (marker-position (pi-annotate--block-end-end block))
-                  nil face nil)
+                  (list (cons 'display "")))
             specs))
     (nreverse specs)))
 
 (defun pi-annotate--render-decorations (review)
-  "Hide the sidecar's plumbing and colour every annotation's rules.
-Overlays that already match are left alone; only a rule whose position or
-face actually changed is rebuilt."
+  "Hide the sidecar's plumbing and dress every annotation.
+The markers that hold a note's coordinates are hidden, and each note is drawn
+as a bar down its left edge with its own colour behind it.  Overlays that
+already match are left alone; only one whose position, face or bar actually
+changed is rebuilt."
   (let* ((buffer (pi-annotate--review-sidecar-buffer review))
          (old (pi-annotate--review-decorations review))
          (groups nil)                   ; (KEY . SPECS) for this redraw
@@ -725,7 +815,7 @@ face actually changed is rebuilt."
                                                (line-end-position)))
           (push (cons 'source
                       (list (list (line-beginning-position) (line-end-position)
-                                  "" nil nil)))
+                                  (list (cons 'display "")))))
                 groups)))
       (dolist (block (pi-annotate--review-blocks review))
         (push (cons (pi-annotate--block-id block)
@@ -735,7 +825,10 @@ face actually changed is rebuilt."
       (dolist (group groups)
         (let ((made (pi-annotate--deco-overlays (cdr (assq (car group) old))
                                                 (cdr group))))
-          (setq kept (nconc made kept))
+          ;; `append', not `nconc': nconc would splice the overlays already
+          ;; kept onto the end of MADE, so the group pushed below would list
+          ;; other groups' overlays as its own
+          (setq kept (append made kept))
           (push (cons (car group) made) overlays))))
     ;; drop overlays no block claims any more
     (dolist (entry old)
